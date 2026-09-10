@@ -11,6 +11,11 @@ on:
         description: 'List of packages to publish (one per line)'
         required: true
         type: string
+      flutter_version_file:
+        description: 'Optional path to a Flutter version file, such as .fvmrc'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -52,6 +57,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version-file: ${{ inputs.flutter_version_file }}
           cache: true
 
       - name: Install dependencies for ${{ matrix.package }}
