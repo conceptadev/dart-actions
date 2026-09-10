@@ -195,6 +195,10 @@ your project. When omitted, the workflow continues to use the latest stable
 Flutter release. A `pubspec.yaml` version file must declare an exact Flutter
 version, not a range.
 
+Dependency installation, tests, and the publication dry run use public access.
+The workflow provisions OIDC credentials only immediately before upload, with
+the Dart SDK version bundled in the selected Flutter release.
+
 #### What It Does
 
 For each package:

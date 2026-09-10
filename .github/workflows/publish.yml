@@ -50,15 +50,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Dart (provision OIDC)
-        uses: dart-lang/setup-dart@v1
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           flutter-version-file: ${{ inputs.flutter_version_file }}
           cache: true
+
+      - name: Read the Flutter Dart SDK version
+        id: dart-version
+        run: echo "version=$(cat "$FLUTTER_ROOT/bin/cache/dart-sdk/version")" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies for ${{ matrix.package }}
         working-directory: ${{ inputs.packages_folder_path }}/${{ matrix.package }}
@@ -107,6 +108,13 @@ jobs:
       - name: Publish ${{ matrix.package }} - dry run
         working-directory: ${{ inputs.packages_folder_path }}/${{ matrix.package }}
         run: dart pub publish --dry-run
+
+      # Public dependency metadata must not receive the publishing credential.
+      # Provision it after validation, using the same Dart version as Flutter.
+      - name: Set up Dart (provision OIDC)
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ steps.dart-version.outputs.version }}
 
       - name: Publish ${{ matrix.package }} to pub.dev (OIDC)
         working-directory: ${{ inputs.packages_folder_path }}/${{ matrix.package }}
