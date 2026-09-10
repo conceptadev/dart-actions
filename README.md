@@ -188,6 +188,12 @@ jobs:
 |-------|-------------|----------|---------|
 | `packages_folder_path` | Path to the folder containing packages | Yes | `"packages"` |
 | `packages` | List of package names to publish (one per line) | Yes | See example above |
+| `flutter_version_file` | Repository-relative path to an exact Flutter version in `.fvmrc`, `.fvm/fvm_config.json`, or `pubspec.yaml` | No | `".fvmrc"` |
+
+Set `flutter_version_file: ".fvmrc"` to publish with the same SDK pinned by
+your project. When omitted, the workflow continues to use the latest stable
+Flutter release. A `pubspec.yaml` version file must declare an exact Flutter
+version, not a range.
 
 #### What It Does
 
@@ -403,4 +409,3 @@ When contributing to these workflows:
 ## License
 
 See [LICENSE](LICENSE) file for details.
-
