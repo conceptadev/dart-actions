@@ -118,4 +118,8 @@ jobs:
 
       - name: Publish ${{ matrix.package }} to pub.dev (OIDC)
         working-directory: ${{ inputs.packages_folder_path }}/${{ matrix.package }}
-        run: dart pub publish --force
+        # The required dry run above already resolves and validates this package.
+        # Repeating resolution with OIDC authenticates public advisory requests,
+        # which pub.dev rejects with HTTP 403 before the upload can start.
+        # Keep the dry run mandatory and make no package changes between steps.
+        run: dart pub publish --force --skip-validation
