@@ -1,0 +1,87 @@
+name: Dart Actions foundation checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Offline regression tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Verify legacy entrypoints are unchanged in this phase
+        run: |
+          test "$(git hash-object .github/workflows/ci.yml)" = 005613ee743d202ca4ac4161418f3fd1a24e9ef1
+          test "$(git hash-object .github/workflows/publish.yml)" = a24e5cb483616ad787d05ae95ad5fa6c2d017f3c
+      - name: Install checksum-pinned actionlint
+        env:
+          ARCHIVE: ${{ runner.temp }}/actionlint.tar.gz
+        run: |
+          curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+            --connect-timeout 20 --max-time 120 --retry 2 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$ARCHIVE"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $ARCHIVE" | sha256sum --check
+          tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP" actionlint
+      - name: Lint workflow syntax and expressions
+        # Legacy shell bodies are frozen, not silently fixed by this PR.
+        # New shell bodies are checked in the separate strict invocation.
+        run: |
+          "$RUNNER_TEMP/actionlint" -color -shellcheck= -pyflakes=
+          "$RUNNER_TEMP/actionlint" -color -pyflakes= \
+            .github/workflows/ci-verified.yml \
+            .github/workflows/foundation-tests.yml \
+            .github/workflows/pr-title-check.yml
+
+  package-fixtures:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: dart
+            version-file: fixtures/minimum.fvmrc
+            bootstrap: dart pub get
+            validate: dart analyze --fatal-infos && dart test
+          - package: flutter
+            version-file: fixtures/modern.fvmrc
+            bootstrap: flutter pub get
+            validate: flutter analyze --fatal-infos && flutter test
+    uses: ./.github/workflows/ci-verified.yml
+    with:
+      version-file: ${{ matrix.version-file }}
+      releases-file: fixtures/flutter-releases.json
+      working-directory: fixtures/${{ matrix.package }}
+      bootstrap-command: ${{ matrix.bootstrap }}
+      validation-command: ${{ matrix.validate }}
+
+  melos-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        melos: ['6.3.3', '7.3.0', '8.5.0', '8.7.0']
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./actions/setup-flutter
+        with:
+          version-file: fixtures/modern.fvmrc
+          releases-file: fixtures/flutter-releases.json
+      - name: Exercise repository-resolved Melos
+        env:
+          MELOS_VERSION: ${{ matrix.melos }}
+        run: python3 tool/melos_smoke.py "$MELOS_VERSION"
