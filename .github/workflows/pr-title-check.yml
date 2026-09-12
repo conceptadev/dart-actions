@@ -1,52 +1,65 @@
-name: "Pull-Request Title Check"
-
+name: Pull-Request Title Check
 on:
   workflow_call:
     inputs:
       comment_header:
-        description: "Header used for the sticky PR comment"
-        required: false
+        description: Header used for the PR lint comment.
+        type: string
         default: pr-title-lint-error
-        type: string
       comment_message:
-        description: "Message shown when PR title is invalid"
-        required: false
-        default: |
-          Hey there and thank you for opening this pull request! 👋🏼
-
-          We require pull request titles to follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)
-          and it looks like your proposed title needs to be adjusted.
-
-          Details:
-
-          ```
-          ${{ steps.lint_pr_title.outputs.error_message }}
-          ```
+        description: Explanation to show before the runtime lint diagnostic.
         type: string
+        default: "Please use a Conventional Commit title such as fix(scope): description."
+
+permissions: {}
 
 jobs:
   main:
     name: Validate PR title
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       pull-requests: write
-
     steps:
-      - uses: amannn/action-semantic-pull-request@v5.5.3
+      # No checkout or PR-head code execution in this write-enabled job.
+      - uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
         id: lint_pr_title
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Add PR comment for invalid title
-        if: always() && (steps.lint_pr_title.outputs.error_message != null)
-        uses: marocchino/sticky-pull-request-comment@v2
+      - name: Update lint comment when write access is available
+        if: >-
+          ${{ always() && !cancelled() &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]' &&
+          (steps.lint_pr_title.outputs.error_message != '' || steps.lint_pr_title.outcome == 'success') }}
+        continue-on-error: true
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          COMMENT_HEADER: ${{ inputs.comment_header }}
+          COMMENT_MESSAGE: ${{ inputs.comment_message }}
+          LINT_ERROR: ${{ steps.lint_pr_title.outputs.error_message }}
         with:
-          header: ${{ inputs.comment_header }}
-          message: ${{ inputs.comment_message }}
-
-      - name: Remove comment if title is fixed
-        if: ${{ steps.lint_pr_title.outputs.error_message == null }}
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          header: ${{ inputs.comment_header }}
-          delete: true
+          script: |
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            // Keep user-controlled text in data, never in executable script.
+            const header = process.env.COMMENT_HEADER;
+            if (!/^[a-zA-Z0-9_-]{1,100}$/.test(header)) {
+              throw new Error('comment_header must use 1-100 letters, digits, underscores or hyphens');
+            }
+            const marker = `<!-- dart-actions:${header} -->`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100
+            });
+            const previous = comments.find(c => c.user?.login === 'github-actions[bot]' && c.body?.startsWith(marker));
+            const error = process.env.LINT_ERROR;
+            if (error) {
+              const body = `${marker}\n${process.env.COMMENT_MESSAGE}\n\n${error}`.slice(0, 60000);
+              if (previous) {
+                await github.rest.issues.updateComment({owner, repo, comment_id: previous.id, body});
+              } else {
+                await github.rest.issues.createComment({owner, repo, issue_number, body});
+              }
+            } else if (previous) {
+              await github.rest.issues.deleteComment({owner, repo, comment_id: previous.id});
+            }
