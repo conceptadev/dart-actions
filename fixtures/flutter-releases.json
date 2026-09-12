@@ -1,0 +1,13 @@
+{
+  "description": "Reviewed Linux x64 stable archives. Source: https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json (2026-09-12). Version selection stays in each .fvmrc.",
+  "releases": {
+    "3.41.2": {
+      "dart": "3.11.0",
+      "sha256": "4a04f8a6152986d14fc137ffaf98106ca743c0f9ab66f1bc2f20ee84eb573e5c"
+    },
+    "3.44.0": {
+      "dart": "3.12.0",
+      "sha256": "e1ec95e6c550458a34de93580cb85dac24da0e9bedb9bb42811f050ac5a0c7d5"
+    }
+  }
+}
