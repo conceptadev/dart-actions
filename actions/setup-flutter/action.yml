@@ -1,0 +1,43 @@
+name: Set up verified Flutter and Dart
+description: Install a caller-pinned Linux x64 Flutter archive with SHA-256 verification.
+inputs:
+  version-file:
+    description: Caller-relative JSON file with an exact flutter version, normally .fvmrc.
+    default: .fvmrc
+  releases-file:
+    description: Caller-relative reviewed release manifest with Dart versions and archive hashes.
+    default: .github/flutter-releases.json
+outputs:
+  flutter-version:
+    description: Installed Flutter version.
+    value: ${{ steps.install.outputs.flutter-version }}
+  dart-version:
+    description: Installed bundled Dart version.
+    value: ${{ steps.install.outputs.dart-version }}
+  sdk-path:
+    description: Absolute Flutter SDK directory.
+    value: ${{ steps.install.outputs.sdk-path }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve reviewed SDK
+      id: release
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        VERSION_FILE: ${{ inputs.version-file }}
+        RELEASES_FILE: ${{ inputs.releases-file }}
+      run: python3 "$ACTION_PATH/sdk.py" resolve --version-file "$VERSION_FILE" --releases-file "$RELEASES_FILE"
+    - name: Cache archive, never an extracted SDK
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ${{ runner.temp }}/dart-actions-archives/${{ steps.release.outputs.sha256 }}
+        key: dart-actions-flutter-linux-x64-${{ steps.release.outputs.sha256 }}
+    - name: Verify archive and SDK versions
+      id: install
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        VERSION_FILE: ${{ inputs.version-file }}
+        RELEASES_FILE: ${{ inputs.releases-file }}
+      run: python3 "$ACTION_PATH/sdk.py" install --version-file "$VERSION_FILE" --releases-file "$RELEASES_FILE"

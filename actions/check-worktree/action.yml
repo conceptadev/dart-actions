@@ -1,0 +1,10 @@
+name: Require a clean source tree
+description: Fail on tracked or unignored untracked changes without restoring or deleting them.
+runs:
+  using: composite
+  steps:
+    - name: Check source drift
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/check.sh"
