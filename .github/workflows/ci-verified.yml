@@ -1,0 +1,62 @@
+name: Verified Dart and Flutter CI
+
+# Opt-in replacement. Legacy ci.yml and publish.yml remain unchanged.
+on:
+  workflow_call:
+    inputs:
+      version-file:
+        description: Caller-relative .fvmrc-style JSON with an exact Flutter version.
+        type: string
+        default: .fvmrc
+      releases-file:
+        description: Caller-relative reviewed Flutter archive manifest.
+        type: string
+        default: .github/flutter-releases.json
+      working-directory:
+        description: Package or workspace directory inside the checkout.
+        type: string
+        default: .
+      bootstrap-command:
+        description: Trusted caller bootstrap command, executed without write credentials.
+        type: string
+        default: dart pub get
+      validation-command:
+        description: Trusted caller analysis and test command. Use repository-resolved Melos for workspaces.
+        type: string
+        default: dart analyze --fatal-infos && dart test
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up the reviewed SDK
+        # This is the provider action, not ./.github/actions in the caller.
+        uses: conceptadev/dart-actions/actions/setup-flutter@88b1232c8bf8506c61bba856fd02032759a5289a
+        with:
+          version-file: ${{ inputs.version-file }}
+          releases-file: ${{ inputs.releases-file }}
+      - name: Resolve dependencies
+        env:
+          COMMAND: ${{ inputs.bootstrap-command }}
+        run: bash --noprofile --norc -eo pipefail -c "$COMMAND"
+      - name: Check formatting without changing files
+        run: dart format --output=none --set-exit-if-changed .
+      - name: Analyze and test
+        env:
+          COMMAND: ${{ inputs.validation-command }}
+        run: bash --noprofile --norc -eo pipefail -c "$COMMAND"
+      - name: Require unchanged source
+        uses: conceptadev/dart-actions/actions/check-worktree@88b1232c8bf8506c61bba856fd02032759a5289a
