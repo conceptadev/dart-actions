@@ -230,20 +230,25 @@ class ReleasePlan {
   final List<PlannedDeployment> deployments;
   final List<Diagnostic> diagnostics;
 
-  /// True when nothing needs to be released.
+  /// True when the plan contains no package-version releases.
+  ///
+  /// A no-op package release plan may still contain deployment work.
   bool get isNoop => releases.isEmpty;
 
   bool get hasErrors => diagnostics.hasErrors;
 
   /// Package names grouped by publication stage, lowest dependency first.
   List<List<String>> get stages {
-    if (releases.isEmpty) return const [];
-    final highest = releases
+    final publishable = releases
+        .where((release) => release.action == ReleaseAction.publish)
+        .toList(growable: false);
+    if (publishable.isEmpty) return const [];
+    final highest = publishable
         .map((r) => r.stage)
         .reduce((a, b) => a > b ? a : b);
     return List.generate(
       highest + 1,
-      (stage) => releases
+      (stage) => publishable
           .where((r) => r.stage == stage)
           .map((r) => r.package)
           .toList(growable: false),
@@ -273,6 +278,24 @@ class ReleasePlan {
   String toReport() {
     final buffer = StringBuffer()
       ..writeln('Release Toolkit plan (channel: ${channel.name})');
+    void writeTarget(ReleaseTarget target, String label) {
+      buffer
+        ..writeln(
+          '  ${target.package}  ${target.currentVersion} -> '
+          '${target.proposedVersion}  (${target.bump.name}, $label)',
+        )
+        ..writeln('    reasons: ${target.reasons.join('; ')}');
+      if (target.group != null) {
+        buffer.writeln('    group: ${target.group}');
+      }
+      for (final update in target.dependencyUpdates) {
+        buffer.writeln(
+          '    ${update.section}: ${update.dependency} '
+          '${update.from} -> ${update.to}',
+        );
+      }
+    }
+
     if (!source.isEmpty) {
       final parts = [
         if (source.repository != null) source.repository,
@@ -282,35 +305,29 @@ class ReleasePlan {
       buffer.writeln('Source: ${parts.join(' @ ')}');
     }
     if (isNoop) {
-      buffer.writeln('No releases. Nothing to prepare, tag, or publish.');
+      buffer.writeln('No package-version releases.');
     } else {
-      for (final (index, stage) in stages.indexed) {
-        buffer.writeln('Stage $index:');
-        for (final name in stage) {
-          final target = releases.firstWhere((r) => r.package == name);
-          final label = target.action == ReleaseAction.publish
-              ? 'publish'
-              : 'version only';
-          buffer
-            ..writeln(
-              '  $name  ${target.currentVersion} -> '
-              '${target.proposedVersion}  (${target.bump.name}, $label)',
-            )
-            ..writeln('    reasons: ${target.reasons.join('; ')}');
-          if (target.group != null) {
-            buffer.writeln('    group: ${target.group}');
-          }
-          for (final update in target.dependencyUpdates) {
-            buffer.writeln(
-              '    ${update.section}: ${update.dependency} '
-              '${update.from} -> ${update.to}',
-            );
-          }
+      final versionOnly = releases
+          .where((target) => target.action == ReleaseAction.versionOnly)
+          .toList(growable: false);
+      if (versionOnly.isNotEmpty) {
+        buffer.writeln('Version-only targets:');
+        for (final target in versionOnly) {
+          writeTarget(target, 'version only');
         }
       }
-      buffer.writeln('Tags:');
-      for (final tag in tags) {
-        buffer.writeln('  ${tag.tag}  (${tag.packages.join(', ')})');
+      for (final (index, stage) in stages.indexed) {
+        buffer.writeln('Publication stage $index:');
+        for (final name in stage) {
+          final target = releases.firstWhere((r) => r.package == name);
+          writeTarget(target, 'publish');
+        }
+      }
+      if (tags.isNotEmpty) {
+        buffer.writeln('Tags:');
+        for (final tag in tags) {
+          buffer.writeln('  ${tag.tag}  (${tag.packages.join(', ')})');
+        }
       }
     }
     if (metadata.isNotEmpty) {

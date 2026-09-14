@@ -85,7 +85,7 @@ void main() {
     test('plans a published root package alongside a member', () {
       final result = plan(
         'root_package_workspace',
-        bumps: {'legacy_helper': BumpLevel.minor},
+        bumps: {'legacy_helper': BumpLevel.patch},
       );
       expect(result.releases.map((r) => r.package), [
         'legacy_helper',
@@ -95,7 +95,7 @@ void main() {
       expect(target(result, 'legacy_root').stage, 1);
       expect(
         target(result, 'legacy_root').dependencyUpdates.single.to,
-        '^0.2.0',
+        '^0.1.1',
       );
     });
   });
@@ -147,10 +147,10 @@ void main() {
     test('releasing one leaves unrelated packages untouched', () {
       final result = plan(
         'mixed_workspace',
-        bumps: {'sample_cli_tool': BumpLevel.minor},
+        bumps: {'sample_cli_tool': BumpLevel.patch},
       );
       expect(result.releases.map((r) => r.package), ['sample_cli_tool']);
-      expect(result.tags.single.tag, 'cli-v0.10.0');
+      expect(result.tags.single.tag, 'cli-v0.9.1');
       final update = result.metadata.single;
       expect(update.package, 'sample_generator');
       expect(update.update.section, 'dev_dependencies');
@@ -335,6 +335,114 @@ void main() {
       );
       expect(result.releases.single.proposedVersion.toString(), '1.2.1-rc.0');
     });
+
+    test('accepts a selected runtime edge that allows the prerelease', () {
+      final workspace = Workspace(
+        rootName: 'consumer',
+        packages: [
+          PackageManifest(
+            name: 'consumer',
+            path: '.',
+            version: v('1.0.0'),
+            isPrivate: false,
+            usesFlutter: false,
+            dependencies: [
+              PackageDependency(
+                name: 'dependency',
+                section: DependencySection.dependencies,
+                kind: DependencyKind.hosted,
+                constraint: VersionConstraint.parse('>=1.0.0 <2.0.0'),
+                rawConstraint: '>=1.0.0 <2.0.0',
+              ),
+            ],
+          ),
+          PackageManifest(
+            name: 'dependency',
+            path: 'packages/dependency',
+            version: v('1.0.0'),
+            isPrivate: false,
+            usesFlutter: false,
+            dependencies: const [],
+          ),
+        ],
+      );
+      final config = ReleaseConfig(
+        configVersion: 1,
+        defaultTagTemplate: '{package}-v{version}',
+        defaultGroupTagTemplate: 'v{version}',
+        bumpDependents: BumpLevel.none,
+        groups: const [],
+        packages: const [
+          PackageRule(name: 'consumer', publish: true),
+          PackageRule(name: 'dependency', publish: true),
+        ],
+        deployments: const [],
+      );
+      final result = planRelease(
+        workspace: workspace,
+        config: config,
+        request: const ReleaseRequest(
+          channel: ReleaseChannel.beta,
+          bumps: {'consumer': BumpLevel.patch, 'dependency': BumpLevel.minor},
+        ),
+      );
+      expect(result.hasErrors, isFalse);
+      expect(codes(result), isNot(contains('dependency-floor-conflict')));
+    });
+
+    test('rejects a selected runtime edge that excludes the prerelease', () {
+      final workspace = Workspace(
+        rootName: 'consumer',
+        packages: [
+          PackageManifest(
+            name: 'consumer',
+            path: '.',
+            version: v('1.0.0'),
+            isPrivate: false,
+            usesFlutter: false,
+            dependencies: [
+              PackageDependency(
+                name: 'dependency',
+                section: DependencySection.dependencies,
+                kind: DependencyKind.hosted,
+                constraint: VersionConstraint.parse('>=1.0.0 <1.1.0-beta.0'),
+                rawConstraint: '>=1.0.0 <1.1.0-beta.0',
+              ),
+            ],
+          ),
+          PackageManifest(
+            name: 'dependency',
+            path: 'packages/dependency',
+            version: v('1.0.0'),
+            isPrivate: false,
+            usesFlutter: false,
+            dependencies: const [],
+          ),
+        ],
+      );
+      final config = ReleaseConfig(
+        configVersion: 1,
+        defaultTagTemplate: '{package}-v{version}',
+        defaultGroupTagTemplate: 'v{version}',
+        bumpDependents: BumpLevel.none,
+        groups: const [],
+        packages: const [
+          PackageRule(name: 'consumer', publish: true),
+          PackageRule(name: 'dependency', publish: true),
+        ],
+        deployments: const [],
+      );
+      final result = planRelease(
+        workspace: workspace,
+        config: config,
+        request: const ReleaseRequest(
+          channel: ReleaseChannel.beta,
+          bumps: {'consumer': BumpLevel.patch, 'dependency': BumpLevel.minor},
+        ),
+      );
+      expect(result.hasErrors, isTrue);
+      expect(codes(result), contains('dependency-floor-conflict'));
+    });
   });
 
   group('explicit versions', () {
@@ -398,7 +506,7 @@ void main() {
       expect(diagnostic.message, contains('Existence alone is not proof'));
     });
 
-    test('a partial release can resume on the remaining packages', () {
+    test('retains every target in an error-bearing plan', () {
       // sample_annotations published, sample_core did not. Re-planning the
       // same release must still describe the whole approved set so the
       // publisher can skip what is already done deliberately.
@@ -432,6 +540,94 @@ void main() {
             .map((r) => r.package),
         isNot(contains('sample_playground')),
       );
+    });
+
+    test('a private-only release has no tag or publication stage', () {
+      final workspace = Workspace(
+        rootName: 'private_app',
+        packages: [
+          PackageManifest(
+            name: 'private_app',
+            path: '.',
+            version: v('1.0.0'),
+            isPrivate: true,
+            usesFlutter: false,
+            dependencies: const [],
+          ),
+        ],
+      );
+      final config = ReleaseConfig(
+        configVersion: 1,
+        defaultTagTemplate: '{package}-v{version}',
+        defaultGroupTagTemplate: 'v{version}',
+        bumpDependents: BumpLevel.patch,
+        groups: const [],
+        packages: const [PackageRule(name: 'private_app', publish: false)],
+        deployments: const [],
+      );
+      final result = planRelease(
+        workspace: workspace,
+        config: config,
+        request: const ReleaseRequest(bumps: {'private_app': BumpLevel.patch}),
+      );
+      expect(result.hasErrors, isFalse);
+      expect(result.releases.single.action, ReleaseAction.versionOnly);
+      expect(result.tags, isEmpty);
+      expect(result.stages, isEmpty);
+      expect(result.toReport(), contains('Version-only targets:'));
+      expect(result.toReport(), isNot(contains('Publication stage')));
+    });
+
+    test('a mixed group tag and stages contain only publishable owners', () {
+      final workspace = Workspace(
+        rootName: 'private_app',
+        packages: [
+          PackageManifest(
+            name: 'private_app',
+            path: '.',
+            version: v('1.0.0'),
+            isPrivate: true,
+            usesFlutter: false,
+            dependencies: const [],
+          ),
+          PackageManifest(
+            name: 'public_package',
+            path: 'packages/public_package',
+            version: v('1.0.0'),
+            isPrivate: false,
+            usesFlutter: false,
+            dependencies: const [],
+          ),
+        ],
+      );
+      final config = ReleaseConfig(
+        configVersion: 1,
+        defaultTagTemplate: '{package}-v{version}',
+        defaultGroupTagTemplate: 'v{version}',
+        bumpDependents: BumpLevel.patch,
+        groups: [
+          ReleaseGroup(
+            name: 'mixed',
+            packages: const ['private_app', 'public_package'],
+          ),
+        ],
+        packages: const [
+          PackageRule(name: 'private_app', publish: false),
+          PackageRule(name: 'public_package', publish: true),
+        ],
+        deployments: const [],
+      );
+      final result = planRelease(
+        workspace: workspace,
+        config: config,
+        request: const ReleaseRequest(bumps: {'private_app': BumpLevel.patch}),
+      );
+      expect(result.hasErrors, isFalse);
+      expect(result.tags.single.packages, ['public_package']);
+      expect(result.stages, [
+        ['public_package'],
+      ]);
+      expect(target(result, 'private_app').tag, isNull);
     });
 
     test('records deployments even when nothing is released', () {

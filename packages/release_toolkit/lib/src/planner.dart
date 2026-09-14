@@ -237,6 +237,11 @@ ReleasePlan planRelease({
     final released =
         unit.members.where((m) => proposals.containsKey(m)).toList()..sort();
     if (released.isEmpty) continue;
+    final owners = [
+      for (final member in released)
+        if (_isPublishable(config, workspace, member)) member,
+    ];
+    if (owners.isEmpty) continue;
     final version = proposals[released.first]!;
     final template = unit.group != null
         ? (unit.group!.tagTemplate ?? config.defaultGroupTagTemplate)
@@ -268,11 +273,8 @@ ReleasePlan planRelease({
       );
       continue;
     }
-    tagOwners[tag] = [
-      for (final member in released)
-        if (_isPublishable(config, workspace, member)) member,
-    ];
-    for (final member in released) {
+    tagOwners[tag] = owners;
+    for (final member in owners) {
       tagForPackage[member] = tag;
     }
   }
@@ -357,7 +359,8 @@ ReleasePlan planRelease({
     diagnostics.add(
       const Diagnostic.note(
         'no-release',
-        'Nothing was selected for release. This is a no-op plan.',
+        'No package versions were selected for release. Deployment work may '
+            'still be present in this plan.',
       ),
     );
   }
@@ -710,6 +713,24 @@ bool _applyDependencyFloors({
     for (final edge in dependent.dependencies) {
       final released = proposals[edge.name];
       if (released == null || !edge.carriesVersionFloor) continue;
+      if (released.isPreRelease) {
+        final selectedRuntimeEdge =
+            proposals.containsKey(dependent.name) &&
+            edge.section == DependencySection.dependencies;
+        if (selectedRuntimeEdge &&
+            !(edge.constraint?.allows(released) ?? true)) {
+          diagnostics.add(
+            Diagnostic.error(
+              'dependency-floor-conflict',
+              '"${dependent.name}" constrains "${edge.name}" to '
+                  '"${edge.rawConstraint}", which excludes the proposed '
+                  '$released. Widen it deliberately rather than automatically.',
+              target: dependent.name,
+            ),
+          );
+        }
+        continue;
+      }
       final result = raiseDependencyFloor(edge.rawConstraint!, released);
       switch (result.outcome) {
         case FloorOutcome.unchanged:
@@ -827,13 +848,17 @@ Map<String, int> _computeStages({
   required Map<String, Version> proposals,
   required List<Diagnostic> diagnostics,
 }) {
-  final targets = proposals.keys.toList()..sort();
+  final targets =
+      proposals.keys
+          .where((name) => _isPublishable(config, workspace, name))
+          .toList()
+        ..sort();
   final needs = <String, Set<String>>{
     for (final name in targets)
       name: {
         for (final edge in workspace[name]!.dependencies)
           if (edge.section == DependencySection.dependencies &&
-              proposals.containsKey(edge.name) &&
+              targets.contains(edge.name) &&
               edge.name != name)
             edge.name,
       },

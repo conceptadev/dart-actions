@@ -89,6 +89,17 @@ void main() {
       expect(result.constraint, '^1.3.0');
     });
 
+    test('rejects a caret increase outside its compatible range', () {
+      expect(
+        raiseDependencyFloor('^1.2.0', v('2.0.0')).outcome,
+        FloorOutcome.conflict,
+      );
+      expect(
+        raiseDependencyFloor('^0.2.0', v('0.3.0')).outcome,
+        FloorOutcome.conflict,
+      );
+    });
+
     test('keeps an explicit upper bound', () {
       final result = raiseDependencyFloor('>=1.2.0 <2.0.0', v('1.3.0'));
       expect(result.outcome, FloorOutcome.raised);
@@ -101,13 +112,23 @@ void main() {
       expect(result.constraint, '1.3.0');
     });
 
+    test('preserves an equal exact pin', () {
+      expect(
+        raiseDependencyFloor('1.3.0', v('1.3.0')).outcome,
+        FloorOutcome.unchanged,
+      );
+    });
+
+    test('rejects lowering an exact pin', () {
+      expect(
+        raiseDependencyFloor('1.4.0', v('1.3.0')).outcome,
+        FloorOutcome.conflict,
+      );
+    });
+
     test('leaves a floor that already allows the release', () {
       expect(
         raiseDependencyFloor('^1.3.0', v('1.3.0')).outcome,
-        FloorOutcome.unchanged,
-      );
-      expect(
-        raiseDependencyFloor('^2.0.0', v('1.3.0')).outcome,
         FloorOutcome.unchanged,
       );
     });

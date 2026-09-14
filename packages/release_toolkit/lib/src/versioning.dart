@@ -138,6 +138,7 @@ FloorResult raiseDependencyFloor(String raw, Version released) {
 
   if (parsed is Version) {
     if (parsed == released) return const FloorResult(FloorOutcome.unchanged);
+    if (parsed > released) return const FloorResult(FloorOutcome.conflict);
     return FloorResult(FloorOutcome.raised, constraint: released.toString());
   }
 
@@ -146,13 +147,13 @@ FloorResult raiseDependencyFloor(String raw, Version released) {
   }
 
   final min = parsed.min!;
+  if (!parsed.allows(released)) {
+    return const FloorResult(FloorOutcome.conflict);
+  }
   if (min >= released) return const FloorResult(FloorOutcome.unchanged);
 
   if (trimmed.startsWith('^')) {
     return FloorResult(FloorOutcome.raised, constraint: '^$released');
-  }
-  if (!parsed.allows(released)) {
-    return const FloorResult(FloorOutcome.conflict);
   }
   final rewritten = trimmed.replaceFirst(min.toString(), released.toString());
   return FloorResult(FloorOutcome.raised, constraint: rewritten);
