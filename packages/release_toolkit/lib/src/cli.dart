@@ -9,6 +9,7 @@ import 'diagnostics.dart';
 import 'loader.dart';
 import 'plan.dart';
 import 'planner.dart';
+import 'preparation.dart';
 import 'version.dart';
 import 'workspace.dart';
 
@@ -26,8 +27,8 @@ abstract final class ExitCodes {
 
 /// Runs the `release_toolkit` CLI.
 ///
-/// Every command is read-only: nothing here writes a file, runs Git, contacts
-/// a registry, or reads a credential.
+/// Planning and diagnostics are read-only. Preparation writes only to a new,
+/// isolated checkout and never publishes, pushes, or creates a tag.
 int run(
   List<String> arguments, {
   required StringSink out,
@@ -57,6 +58,7 @@ int run(
   return switch (command.name) {
     'doctor' => _doctor(command, out: out, err: err),
     'plan' => _plan(command, out: out, err: err),
+    'prepare' => _prepare(command, out: out, err: err),
     _ => () {
       err.writeln(_usage(parser));
       return ExitCodes.usage;
@@ -105,11 +107,27 @@ ArgParser _buildParser() {
     ..addOption('source-ref', help: 'Recorded source ref.')
     ..addOption('source-revision', help: 'Recorded source commit.');
 
+  final prepare = ArgParser()
+    ..addOption('plan', mandatory: true, help: 'JSON release plan to apply.')
+    ..addOption(
+      'directory',
+      abbr: 'C',
+      mandatory: true,
+      help: 'Clean source Git checkout recorded by the plan.',
+    )
+    ..addOption(
+      'output',
+      mandatory: true,
+      help: 'Previously nonexistent directory for the prepared checkout.',
+    )
+    ..addFlag('json', negatable: false, help: 'Emit machine-readable JSON.');
+
   return ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
     ..addFlag('version', negatable: false, help: 'Print the toolkit version.')
     ..addCommand('doctor', shared())
-    ..addCommand('plan', plan);
+    ..addCommand('plan', plan)
+    ..addCommand('prepare', prepare);
 }
 
 String _usage(ArgParser parser) =>
@@ -121,6 +139,7 @@ Usage: release_toolkit <command> [options]
 Commands:
   doctor    Validate the workspace and release.yaml. Reports problems only.
   plan      Produce a deterministic, read-only release plan.
+  prepare   Apply an approved plan in a new isolated checkout.
 
 Global options:
 ${parser.usage}
@@ -130,6 +149,9 @@ ${parser.commands['doctor']!.usage}
 
 plan options:
 ${parser.commands['plan']!.usage}
+
+prepare options:
+${parser.commands['prepare']!.usage}
 ''';
 
 String _configPath(ArgResults results) {
@@ -326,6 +348,24 @@ int _plan(
   return plan.hasErrors || loadDiagnostics.hasErrors
       ? ExitCodes.diagnosticsFailed
       : ExitCodes.ok;
+}
+
+int _prepare(
+  ArgResults results, {
+  required StringSink out,
+  required StringSink err,
+}) {
+  final result = prepareRelease(
+    planPath: results.option('plan')!,
+    sourceDirectory: results.option('directory')!,
+    outputDirectory: results.option('output')!,
+  );
+  if (results.flag('json')) {
+    out.write(result.toJsonString());
+  } else {
+    out.write(result.toReport());
+  }
+  return result.success ? ExitCodes.ok : ExitCodes.diagnosticsFailed;
 }
 
 (String?, String?) _split(String entry, List<String> errors, String flag) {

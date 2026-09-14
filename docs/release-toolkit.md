@@ -4,9 +4,10 @@
 deterministic part of a Dart or Flutter release process. The same code runs on a
 maintainer's machine and inside GitHub Actions.
 
-This document covers what exists today: configuration, workspace loading, and
-the read-only `doctor` and `plan` commands. Preparation, publishing, and
-deployment are later stages tracked in the rollout plan (PR #9).
+This document covers what exists today: configuration, workspace loading, the
+read-only `doctor` and `plan` commands, and isolated Melos-backed preparation.
+Publishing, deployment execution, and recovery remain later stages tracked in
+the rollout plan (PR #9).
 
 ## What the core owns, and what it does not
 
@@ -21,6 +22,7 @@ The library owns decisions that must be identical everywhere:
 - ordering publication into dependency stages
 - rendering release tags
 - producing a stable, serializable release plan
+- validating and preparing the approved release diff in an isolated checkout
 
 GitHub Actions owns everything environmental: runners, SDK bootstrap,
 credentials, protected environments, event and ref authorization, artifact
@@ -121,11 +123,13 @@ release_toolkit plan   [--directory .] [--config <path>] [--json]
                         [--source-repository <slug>]
                         [--source-ref <ref>]
                         [--source-revision <sha>]
+release_toolkit prepare --plan <file> --directory <repository>
+                        --output <new-directory> [--json]
 ```
 
 Exit codes: `0` success, `2` the command could not be understood, `3` the
-command ran and reported at least one error diagnostic. Neither command writes
-anything; redirect stdout to capture a plan.
+command ran and reported at least one error diagnostic. `doctor` and `plan`
+never write anything; redirect `plan --json` stdout to capture a plan.
 
 `--bump` is the caller's decision, not a guess. Nothing in the core parses
 commit messages; an adapter that derives bumps from history can be added later
@@ -163,13 +167,17 @@ style is preserved:
 | `^1.2.0` | `1.3.0` | `^1.3.0` |
 | `>=1.2.0 <2.0.0` | `1.3.0` | `>=1.3.0 <2.0.0` |
 | `1.2.0` (exact pin) | `1.3.0` | `1.3.0` |
+| `1.4.0` (exact pin) | `1.3.0` | `dependency-floor-conflict` error |
 | `^1.3.0` | `1.3.0` | unchanged |
+| `^1.2.0` | `2.0.0` | `dependency-floor-conflict` error |
+| `^0.2.0` | `0.3.0` | `dependency-floor-conflict` error |
 | `>=1.2.0 <2.0.0` | `2.0.0` | `dependency-floor-conflict` error |
 | `any` | `1.3.0` | `dependency-floor-unbounded` warning |
 | `^1.2.0` | `1.3.0-beta.0` | unchanged; a pre-release never moves a floor |
 
-A constraint is never widened to make a release fit. Crossing an upper bound is
-a deliberate decision that has to be made in the pubspec.
+A constraint is never widened to make a release fit. Caret major and pre-1.0
+compatibility boundaries and exact-pin downgrades are conflicts that require a
+deliberate pubspec edit.
 
 A floor change on a publishable package selects it for release at
 `defaults.bump_dependents`. A floor change on a package that is not being
@@ -181,6 +189,11 @@ dependencies determine publication order. Dev-dependency floors are still
 updated; when one points at a package that publishes in a later stage, the plan
 reports `dev-dependency-published-later` rather than silently producing a
 release that cannot resolve.
+
+Pre-release versions still never move dependency floors automatically. When a
+selected package has a runtime dependency on another selected pre-release, its
+existing constraint must already allow the proposed version or planning reports
+`dependency-floor-conflict`.
 
 ## The plan document
 
@@ -230,7 +243,53 @@ instead of embedding a hash inside its own commit.
 
 `action` is `publish` or `version-only`. A private package can be
 version-synchronized with a group and can be deployed, but never becomes a
-publish target.
+publish target. Version-only targets do not appear in publication stages. A
+private-only release unit has no tag; a mixed synchronized group has one tag
+whose owners are only its publishable members.
+
+`noop` means there are no package-version releases. It does not mean the plan
+contains no deployment work.
+
+## Isolated preparation
+
+`prepare` requires an error-free schema-1 plan with this toolkit version and a
+full Git object ID in `source.revision`. The source checkout must be clean and
+at that exact revision, and the output path must not exist or sit inside the
+source checkout.
+
+Preparation then:
+
+1. clones the source without Git hard links, leaving its working tree and Git
+   database unchanged;
+2. resolves Melos with `dart run melos` from the cloned repository and accepts
+   only the currently verified exact version, 7.8.1;
+3. reloads `release.yaml` and every manifest, regenerates the planned
+   operations, and checks that Melos includes every selected package (including
+   root-package `useRootAsPackage` configuration);
+4. passes every exact package version and scope to `melos version`, enables
+   conventional-commit changelogs, and explicitly disables dependent edits,
+   release commits, and tags;
+5. applies only the plan's structured dependency edits; and
+6. compares the resulting manifests, versions, dependency constraints,
+   changelog history, files, Git head, and tags with the approved operation set.
+
+Melos aggregate changelogs use the wall clock by default. Preparation
+normalizes only each newly generated aggregate date heading to the approved
+source commit date so the same source produces an equivalent diff on a later
+day. Optional package-level dated changelogs are rejected because they would
+reintroduce wall-clock variance.
+
+Successful JSON reports the prepared directory, source revision, Melos version,
+and every changed file with its reasons. A failure after cloning retains the
+checkout for inspection, writes `.release_toolkit_unusable.json`, and marks the
+directory unusable for release. No preparation path publishes, pushes, creates
+a tag, or modifies the original checkout.
+
+Repository dependencies must already resolve cleanly at the source revision.
+Unsupported Melos versions, fixed-versioning configuration, excluded selected
+packages, stale plans, and other unexpected diff content are actionable
+failures. Version lifecycle hooks are rejected before Melos runs because their
+arbitrary commands cannot be constrained to local, reviewable file edits.
 
 ## Fixtures
 
@@ -258,12 +317,13 @@ analysis.
 
 ## Relationship to the rest of the rollout
 
-- PR #9 holds the architecture and rollout documents. This is the R2
-  deliverable from that plan.
+- PR #9 holds the architecture and rollout documents. Deterministic planning
+  and isolated preparation are implemented here; the remaining R4-R8 rollout
+  is not complete.
 - PR #10 holds the workflow-hardening foundation: the source-drift action,
   actionlint, immutable action pins, and the checksum-verified Flutter setup.
   Those remain useful and are not duplicated here.
 - `release_toolkit` sets `publish_to: none`. The package name is proposed, not
-  reserved. Distribution is R8 and needs its own review.
+  reserved. Distribution, publishing, and recovery need their own review.
 - The existing `ci.yml` and `publish.yml` reusable workflows are untouched.
   Live callers keep their current behaviour.

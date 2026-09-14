@@ -30,12 +30,13 @@ void main() {
       expect(result.out.trim(), toolkitVersion);
     });
 
-    test('help identifies the executable and lists both commands', () {
+    test('help identifies the executable and lists every command', () {
       final result = cli(['--help']);
       expect(result.code, ExitCodes.ok);
       expect(result.out, contains('Usage: release_toolkit <command>'));
       expect(result.out, contains('doctor'));
       expect(result.out, contains('plan'));
+      expect(result.out, contains('prepare'));
     });
 
     test('no command is a usage error', () {
@@ -218,7 +219,7 @@ void main() {
     test('a no-op plan succeeds and says so', () {
       final result = cli(['plan', '-C', fixturePath('mixed_workspace')]);
       expect(result.code, ExitCodes.ok);
-      expect(result.out, contains('No releases'));
+      expect(result.out, contains('No package-version releases'));
     });
 
     test('a pre-release channel is selectable', () {

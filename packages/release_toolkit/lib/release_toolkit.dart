@@ -31,6 +31,8 @@ export 'src/plan.dart'
         ReleaseTarget;
 export 'src/planner.dart'
     show ReleaseRequest, RemoteState, planRelease, validateConfiguration;
+export 'src/preparation.dart'
+    show PreparationChangedFile, PreparationResult, prepareRelease;
 export 'src/version.dart' show toolkitVersion;
 export 'src/versioning.dart'
     show

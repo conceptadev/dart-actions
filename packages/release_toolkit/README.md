@@ -8,16 +8,20 @@ Actions, so a release decision does not depend on where it was made.
 ```bash
 dart run release_toolkit doctor
 dart run release_toolkit plan --bump my_package:minor --json
+dart run release_toolkit prepare --plan release-plan.json \
+  --directory /path/to/repository --output /path/to/prepared --json
 ```
 
 ## Status
 
-Read-only. `doctor` validates a workspace against its `release.yaml`; `plan`
-produces a release plan. Neither writes a file, creates a tag, contacts a
-registry, or reads a credential.
+`doctor` validates a workspace against its `release.yaml`; `plan` produces a
+read-only release plan. `prepare` verifies an approved plan and uses the
+repository-resolved Melos 7.8.1 to produce a reviewable diff in a new isolated
+checkout. It never changes the source checkout, publishes, pushes, or creates a
+tag.
 
-Preparation, publishing, and deployment are later stages. This package sets
-`publish_to: none`: the name is proposed, not reserved.
+Publishing, deployment execution, and recovery are later stages. This package
+sets `publish_to: none`: the name is proposed, not reserved.
 
 ## Layout
 
@@ -29,6 +33,7 @@ Preparation, publishing, and deployment are later stages. This package sets
 | `lib/src/versioning.dart` | version proposals, dependency floors, tags |
 | `lib/src/planner.dart` | the pure planner and configuration validation |
 | `lib/src/plan.dart` | the serializable plan document |
+| `lib/src/preparation.dart` | isolated, validated Melos release preparation |
 | `lib/src/cli.dart` | argument parsing and output |
 
 `planRelease` takes a `Workspace`, a `ReleaseConfig`, a `ReleaseRequest`, and a
