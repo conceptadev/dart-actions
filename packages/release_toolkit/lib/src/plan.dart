@@ -272,7 +272,7 @@ class ReleasePlan {
   /// Human-readable summary for local use and workflow logs.
   String toReport() {
     final buffer = StringBuffer()
-      ..writeln('Concepta Release plan (channel: ${channel.name})');
+      ..writeln('Release Toolkit plan (channel: ${channel.name})');
     if (!source.isEmpty) {
       final parts = [
         if (source.repository != null) source.repository,

@@ -1,10 +1,10 @@
-# Concepta Release configuration for this repository.
+# Release Toolkit configuration for this repository.
 #
-# The toolkit validates itself with this file. concepta_release is not
+# The toolkit validates itself with this file. release_toolkit is not
 # publishable yet: the package name is proposed, not reserved, and
-# distribution is a separate reviewed step (see docs/concepta-release.md).
+# distribution is a separate reviewed step (see docs/release-toolkit.md).
 version: 1
 
 packages:
-  - name: concepta_release
+  - name: release_toolkit
     publish: false

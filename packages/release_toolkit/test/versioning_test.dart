@@ -1,4 +1,4 @@
-import 'package:concepta_release/concepta_release.dart';
+import 'package:release_toolkit/release_toolkit.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:test/test.dart';
 

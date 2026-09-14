@@ -24,7 +24,7 @@ abstract final class ExitCodes {
   static const diagnosticsFailed = 3;
 }
 
-/// Runs the `concepta_release` CLI.
+/// Runs the `release_toolkit` CLI.
 ///
 /// Every command is read-only: nothing here writes a file, runs Git, contacts
 /// a registry, or reads a credential.
@@ -114,9 +114,9 @@ ArgParser _buildParser() {
 
 String _usage(ArgParser parser) =>
     '''
-concepta_release $toolkitVersion
+release_toolkit $toolkitVersion
 
-Usage: concepta_release <command> [options]
+Usage: release_toolkit <command> [options]
 
 Commands:
   doctor    Validate the workspace and release.yaml. Reports problems only.

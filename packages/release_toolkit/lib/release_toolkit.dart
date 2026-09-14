@@ -1,4 +1,4 @@
-/// Deterministic release planning for Concepta Dart and Flutter workspaces.
+/// Deterministic release planning for Dart and Flutter workspaces.
 ///
 /// The planner is pure: [planRelease] never reads Git, contacts a registry,
 /// mutates a file, or acquires a credential. External facts reach it through

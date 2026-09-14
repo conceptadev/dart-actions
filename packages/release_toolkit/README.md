@@ -1,13 +1,13 @@
-# concepta_release
+# release_toolkit
 
-Deterministic release planning for Concepta Dart and Flutter workspaces.
+Deterministic release planning for Dart and Flutter workspaces.
 
 The same library and CLI run on a maintainer's machine and inside GitHub
 Actions, so a release decision does not depend on where it was made.
 
 ```bash
-dart run concepta_release doctor
-dart run concepta_release plan --bump my_package:minor --json
+dart run release_toolkit doctor
+dart run release_toolkit plan --bump my_package:minor --json
 ```
 
 ## Status
@@ -35,4 +35,4 @@ Preparation, publishing, and deployment are later stages. This package sets
 `RemoteState`, and returns a `ReleasePlan`. Everything it needs to know about
 Git, pub.dev, and the calling workflow arrives through those inputs.
 
-Full reference: [`docs/concepta-release.md`](../../docs/concepta-release.md).
+Full reference: [`docs/release-toolkit.md`](../../docs/release-toolkit.md).

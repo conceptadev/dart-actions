@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:concepta_release/concepta_release.dart';
+import 'package:release_toolkit/release_toolkit.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -30,9 +30,10 @@ void main() {
       expect(result.out.trim(), toolkitVersion);
     });
 
-    test('help succeeds and lists both commands', () {
+    test('help identifies the executable and lists both commands', () {
       final result = cli(['--help']);
       expect(result.code, ExitCodes.ok);
+      expect(result.out, contains('Usage: release_toolkit <command>'));
       expect(result.out, contains('doctor'));
       expect(result.out, contains('plan'));
     });

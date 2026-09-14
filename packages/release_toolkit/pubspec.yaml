@@ -1,6 +1,6 @@
-name: concepta_release
+name: release_toolkit
 description: >-
-  Deterministic release planning for Concepta Dart and Flutter workspaces. The
+  Deterministic release planning for Dart and Flutter workspaces. The
   same library and CLI run locally and inside GitHub Actions.
 version: 0.1.0
 publish_to: none

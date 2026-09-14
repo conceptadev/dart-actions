@@ -1,7 +1,7 @@
-# Concepta Release core
+# Release Toolkit core
 
-`packages/concepta_release` is the Dart library and CLI that holds the
-deterministic part of Concepta's release process. The same code runs on a
+`packages/release_toolkit` is the Dart library and CLI that holds the
+deterministic part of a Dart or Flutter release process. The same code runs on a
 maintainer's machine and inside GitHub Actions.
 
 This document covers what exists today: configuration, workspace loading, and
@@ -111,8 +111,8 @@ silently disable a release rule.
 ## Commands
 
 ```
-concepta_release doctor [--directory .] [--config <path>] [--json]
-concepta_release plan   [--directory .] [--config <path>] [--json]
+release_toolkit doctor [--directory .] [--config <path>] [--json]
+release_toolkit plan   [--directory .] [--config <path>] [--json]
                         [--channel stable|beta|rc]
                         [--bump <package>:<none|patch|minor|major>]...
                         [--set-version <package>:<version>]...
@@ -234,7 +234,7 @@ publish target.
 
 ## Fixtures
 
-`packages/concepta_release/test/fixtures` holds the layouts the toolkit has to
+`packages/release_toolkit/test/fixtures` holds the layouts the toolkit has to
 support:
 
 | Fixture | Proves |
@@ -263,7 +263,7 @@ analysis.
 - PR #10 holds the workflow-hardening foundation: the source-drift action,
   actionlint, immutable action pins, and the checksum-verified Flutter setup.
   Those remain useful and are not duplicated here.
-- `concepta_release` sets `publish_to: none`. The package name is proposed, not
+- `release_toolkit` sets `publish_to: none`. The package name is proposed, not
   reserved. Distribution is R8 and needs its own review.
 - The existing `ci.yml` and `publish.yml` reusable workflows are untouched.
   Live callers keep their current behaviour.

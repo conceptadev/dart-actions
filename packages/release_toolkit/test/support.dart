@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:concepta_release/concepta_release.dart';
+import 'package:release_toolkit/release_toolkit.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -27,7 +27,7 @@ String fixturePath(String name) =>
 ///
 /// Keys are repository-relative paths; parent directories are created.
 String scratchWorkspace(Map<String, String> files) {
-  final root = Directory.systemTemp.createTempSync('concepta_release_test_');
+  final root = Directory.systemTemp.createTempSync('release_toolkit_test_');
   addTearDown(() => root.deleteSync(recursive: true));
   files.forEach((relative, contents) {
     final file = File(p.join(root.path, p.joinAll(p.posix.split(relative))));

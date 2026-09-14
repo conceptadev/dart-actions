@@ -1,6 +1,6 @@
-name: Concepta Release core
+name: Release Toolkit core
 
-# Tests the Dart toolkit in packages/concepta_release. It does not touch the
+# Tests the Dart toolkit in packages/release_toolkit. It does not touch the
 # reusable ci.yml or publish.yml contracts that callers already depend on.
 on:
   pull_request:
@@ -63,10 +63,10 @@ jobs:
         run: dart analyze --fatal-infos
       - name: Test
         run: dart test
-        working-directory: packages/concepta_release
+        working-directory: packages/release_toolkit
       - name: Validate this repository with its own toolkit
-        run: dart run concepta_release doctor --directory ../..
-        working-directory: packages/concepta_release
+        run: dart run release_toolkit doctor --directory ../..
+        working-directory: packages/release_toolkit
       - name: Require an unchanged source tree
         run: |
           status="$(git status --porcelain=v1 --untracked-files=normal)"

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:concepta_release/concepta_release.dart';
+import 'package:release_toolkit/release_toolkit.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -24,7 +24,7 @@ void main() {
       pubspec['publish_to'],
       'none',
       reason:
-          'concepta_release is a proposed package name, not a reserved '
+          'release_toolkit is a proposed package name, not a reserved '
           'one. Distribution is a separate reviewed step.',
     );
   });
