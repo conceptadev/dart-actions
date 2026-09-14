@@ -255,7 +255,9 @@ contains no deployment work.
 `prepare` requires an error-free schema-1 plan with this toolkit version and a
 full Git object ID in `source.revision`. The source checkout must be clean and
 at that exact revision, and the output path must not exist or sit inside the
-source checkout.
+source checkout. `doctor` and `plan` retain the toolkit's Dart 3.8 floor;
+`prepare` requires Dart 3.9 or later because the verified Melos 7.8.1 release
+declares that SDK floor.
 
 Preparation then:
 

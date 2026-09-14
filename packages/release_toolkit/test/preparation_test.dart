@@ -237,6 +237,12 @@ String _gitOutput(String root, List<String> arguments) =>
     (_run('git', arguments, cwd: root).stdout as String).trim();
 
 void main() {
+  final supportsMelos781 =
+      Version.parse(Platform.version.split(' ').first) >= Version(3, 9, 0);
+  final melos781Skip = supportsMelos781
+      ? false
+      : 'Melos 7.8.1 requires Dart 3.9.0 or later.';
+
   group('real Melos 7.8.1 preparation', () {
     test('CLI emits the preparation handoff as JSON', () {
       final repository = _repository();
@@ -472,7 +478,7 @@ void main() {
         _gitOutput(second.preparedDirectory, ['diff', '--binary', 'HEAD']),
       );
     });
-  });
+  }, skip: melos781Skip);
 
   group('preparation rejection', () {
     test('rejects a dirty source before creating an output checkout', () {
@@ -595,5 +601,5 @@ void main() {
       );
       expect(_head(repository.path), repository.revision);
     });
-  });
+  }, skip: melos781Skip);
 }

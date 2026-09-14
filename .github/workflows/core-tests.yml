@@ -36,6 +36,8 @@ jobs:
       - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
         with:
           sdk: 3.13.3
+      - name: Resolve workspace dependencies
+        run: dart pub get
       - run: dart format --output=none --set-exit-if-changed .
 
   test:

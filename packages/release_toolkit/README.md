@@ -18,7 +18,8 @@ dart run release_toolkit prepare --plan release-plan.json \
 read-only release plan. `prepare` verifies an approved plan and uses the
 repository-resolved Melos 7.8.1 to produce a reviewable diff in a new isolated
 checkout. It never changes the source checkout, publishes, pushes, or creates a
-tag.
+tag. The planner and validator support Dart 3.8; preparation requires Dart 3.9
+or later because that is Melos 7.8.1's SDK floor.
 
 Publishing, deployment execution, and recovery are later stages. This package
 sets `publish_to: none`: the name is proposed, not reserved.
