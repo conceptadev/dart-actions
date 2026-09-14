@@ -36,7 +36,7 @@ deployments:
     expect(config.bumpDependents, BumpLevel.minor);
     expect(
       config.groups.single.packages,
-      ['a', 'b'],
+      orderedEquals(<String>['a', 'b']),
       reason: 'group members are sorted so plans are order-independent',
     );
     expect(config.packages.map((p) => p.name), ['a', 'b', 'demo']);

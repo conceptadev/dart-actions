@@ -21,6 +21,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  format:
+    # Pinned, not `stable`. The Dart formatter changes between releases, and a
+    # floating version turns unrelated PRs red. Bump this deliberately.
+    name: Format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+        with:
+          sdk: 3.13.3
+      - run: dart format --output=none --set-exit-if-changed .
+
   test:
     name: Dart ${{ matrix.sdk }}
     runs-on: ubuntu-24.04
@@ -42,9 +59,6 @@ jobs:
           sdk: ${{ matrix.sdk }}
       - name: Resolve workspace dependencies
         run: dart pub get
-      - name: Check formatting without changing files
-        if: matrix.sdk == 'stable'
-        run: dart format --output=none --set-exit-if-changed .
       - name: Analyze
         run: dart analyze --fatal-infos
       - name: Test

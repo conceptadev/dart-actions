@@ -321,7 +321,7 @@ void main() {
       expect(result.tags.single.tag, 'v1.5.0-beta.0');
       expect(
         result.releases.map((r) => r.package),
-        ['sample_annotations', 'sample_core'],
+        orderedEquals(<String>['sample_annotations', 'sample_core']),
         reason: 'a pre-release does not drag dependents into the release',
       );
       expect(result.metadata, isEmpty);

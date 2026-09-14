@@ -96,7 +96,7 @@ ReleasePlan planRelease({
   }
 
   final units = <String, _Unit>{};
-  _Unit? unitFor(String package) {
+  _Unit unitFor(String package) {
     final group = config.groupOf(package);
     final key = group == null ? 'package:$package' : 'group:${group.name}';
     return units.putIfAbsent(
@@ -110,7 +110,7 @@ ReleasePlan planRelease({
   }
 
   void select(String package, BumpLevel bump, String reason) {
-    final unit = unitFor(package)!;
+    final unit = unitFor(package);
     unit.bump = unit.bump.max(bump);
     final reasons = unit.reasons[package] ??= [];
     if (!reasons.contains(reason)) reasons.add(reason);
@@ -142,7 +142,7 @@ ReleasePlan planRelease({
           : 'requested ${bump.name}',
     );
     if (override != null) {
-      final unit = unitFor(name)!;
+      final unit = unitFor(name);
       if (unit.override != null && unit.override != override) {
         diagnostics.add(
           Diagnostic.error(
