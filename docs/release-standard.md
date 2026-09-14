@@ -1,143 +1,154 @@
-# Proposed release standard
+# Concepta Release: proposed architecture
 
-Status: Draft for review. This document specifies target behavior; it does not change the existing workflows.
+Status: implementation proposal, revised September 14, 2026. This document describes the target, not deployed functionality. It incorporates the direction agreed in PR #9 and replaces the earlier YAML-first design. See [the implementation plan](release-rollout.md) for dependencies, acceptance tests, and first actions.
 
-Initial scope: `conceptadev/dart-actions`, `conceptadev/remix`, `conceptadev/mix`, `conceptadev/naked_ui`, and `conceptadev/ack`.
+## Goal and scope
 
-## Decision
+Build one versioned release and deployment toolkit for Concepta's Dart and Flutter projects. Use the same release logic locally and in GitHub Actions. Keep caller workflows small, with shared behavior tested in one place.
 
-Use `conceptadev/dart-actions` as the shared implementation for Dart and Flutter release automation. Keep package configuration and specialized checks in each caller repository.
+Use **Concepta Release** as the working product name and `concepta_release` as the proposed Dart package name. Package availability and ownership must be checked before first publication. Keep the repository at `conceptadev/dart-actions` during implementation. Renaming is not a prerequisite; GitHub does not redirect calls to actions after a repository rename. [7]
 
-Retain repository-resolved Melos for version preparation. Use Conventional Commits to propose release notes and versions. Publish existing pub.dev packages with short-lived OIDC credentials through the official Dart integration.
+The scope includes package CI, builds, version preparation, pub.dev publishing, and application/documentation deployment. It includes Dart projects inside mixed-language repositories. It does not mean moving the whole organization into one repository or deploying every discovered project automatically.
 
-Standardize the release process, not every package's version number. Do not introduce a second tool that rewrites the same versions and changelogs.
+## Repository convention
 
-See [the rollout plan](release-rollout.md) for the proposed implementation PRs and migration gates.
+The target organization convention is a Pub workspace plus repository-resolved Melos for each project. New projects use a private workspace root, `packages/` for libraries and CLIs, and `apps/` for applications where useful. One-member workspaces are valid. Existing root packages may retain their layout through Melos's documented `useRootAsPackage` support during reviewed migration. Do not set `publish_to: none` on an existing public root package merely to copy a workspace template. [1, 2]
 
-## Maintainer experience
+Adoption does not require renaming packages, moving existing source immediately, or synchronizing all package versions. Record legacy exceptions until their migrations pass. Pub workspace membership and tooling compatibility must be checked before a layout change; workspace resolution combines development dependencies too. Preserve consumer SDK support with separate consumer tests rather than raising package minimums to match newer release tooling. [1]
 
-Prepare release -> review the release PR -> merge -> verify the release commit -> create approved tags -> publish with OIDC -> verify registry availability.
+Use an exact, reviewed build SDK. Dart projects must not install Flutter just to run this toolkit. Flutter projects use their chosen Flutter SDK and its bundled Dart SDK. CI and local development use the same version source. No SDK download is the responsibility of a Dart CLI that cannot run until the SDK exists.
 
-The preparation action accepts a package or coordinated release group and a stable, beta, or release-candidate channel. It proposes versions, with an explicit version override available for review. It opens or updates a release PR containing the version changes, changelogs, required dependency changes, and derived release metadata.
+## One codebase, thin integrations
 
-Preparation never publishes. Publication remains tag-triggered and subject to the caller's required checks and publishing environment. Automation creates tags only after verifying the reviewed release commit. A label, arbitrary branch name, or supplied artifact is not release authorization.
+Start with **one pure-Dart library/CLI package**, not several small public packages:
 
-The final summary distinguishes published, already present and verified, blocked, failed, and unverified packages. Finalize a GitHub Release only after the selected exact pub.dev versions have been confirmed.
+```text
+conceptadev/dart-actions/
+  pubspec.yaml                   # Private toolkit workspace
+  packages/concepta_release/
+    bin/concepta_release.dart    # Command-line interface
+    lib/concepta_release.dart    # Small supported library API
+    lib/src/                    # Config, planning, sync, and tool adapters
+    test/
+  actions/                      # SDK/bootstrap and small Actions integrations
+  .github/workflows/            # CI, publish, release handoff, deployment jobs
+  fixtures/                     # Private test projects, never auto-published
+  docs/
+```
 
-## Shared and repository-specific responsibilities
+This is a proposed layout. Existing workflows remain available until their consumers migrate.
 
-| Dart Actions owns | Caller repository owns |
+| Component | Responsibility |
 | --- | --- |
-| SDK installation, integrity checks, and caching | The reviewed SDK version source and supported consumer SDK floor |
-| Release preparation and plan validation | Package allowlist, paths, release groups, and versioning policy |
-| Common analysis, test, and publication checks | Special tests, generation checks, and release metadata synchronization |
-| Tag verification and automatic handoffs | Existing tag patterns and required release checks |
-| Hosted-dependency and exact-version checks | Dependency constraints and explicit release-order exceptions |
-| OIDC upload and result reporting | Package publishing authorization and environment protections |
+| Dart library/CLI | Validate configuration; read manifests; compute release plans; enforce version groups; synchronize declared metadata; coordinate checks/builds through maintained tools; verify release results. |
+| GitHub workflows/actions | Bootstrap SDKs, choose runners, validate event/ref identity, transfer artifacts, enforce job permissions/environments, and acquire credentials. |
+| Caller repository | Declare release/deployment targets, SDK source, specialized checks, version policies, and environment configuration. |
 
-Use package manifests and Melos configuration as the source of package versions. Supplemental configuration may define targets, tag patterns, and hooks, but must not duplicate current versions.
+Keep policy and planning functions separate from filesystem, Git, process, and network operations inside the package. Inject those operations in tests. Do not build a general plugin framework or a second workflow scheduler.
 
-The implementation must respect the trust boundary when loading shared helpers: checking out the caller does not also check out Dart Actions. Load provider helpers from an explicit reviewed provider revision and test that the workflow and helper versions agree.
+The CLI delegates version/changelog operations to the caller's resolved Melos through `dart run melos`. It must not import a competing Melos runtime or overwrite the same files through a second version manager. Prefer official SDK and deployment integrations where their tested contracts fit. Reuse the useful components of PR #10; its Flutter-only CI interface is not the final organization contract.
 
-### Proposed workflow interfaces
+## Installation and configuration
 
-These names describe responsibilities, not implemented APIs:
+Consumers add the toolkit as a **workspace-root dev dependency**, not as a runtime dependency of every library. CI resolves the reviewed lockfile and records the actual toolkit version. Until a first hosted release exists, pilot repositories may use an explicitly pinned Git commit and package path. The toolkit tests its own source; it must not need to download an unpublished copy of itself to bootstrap. [8]
 
-| Workflow | Purpose |
+Use one root `release.yaml` for policy that Pub and Melos do not already own. The first core PR defines schema version 1, parser validation, and example fixtures. The proposed sections are:
+
+| Section | Contents |
 | --- | --- |
-| `prepare-release.yml` | Propose versions, run preparation checks, validate a release plan, and create or update the release PR. |
-| `tag-release.yml` | Verify the merged release and create only its approved, non-conflicting tags. |
-| `publish.yml` | Validate tagged packages, perform hosted checks, upload through OIDC, and verify publication. |
+| `schema` | Configuration schema version. |
+| `toolchain` | Reference to the existing exact SDK source; no credentials. |
+| `release_groups` | Explicit member package names, independent or synchronized policy, and tag conventions/exceptions. |
+| `synchronizations` | Declared source-of-truth fields and derived metadata or dependency-floor rules. |
+| `builds` | Named, reviewed commands or Melos scripts, input paths, output artifact, and required platform. |
+| `deployments` | Provider, build artifact, environment, trigger policy, required published dependencies, and verification check. |
 
-Use reusable workflows for jobs and permission boundaries. Use small shared actions or helpers for logic that needs to compose with a caller's platform-specific jobs. Preserve current callers until a tested migration is available; do not replace `publish.yml` with an incompatible contract in one step.
+Read package names, current versions, dependencies, workspace members, and publishability from manifests. Read Melos scripts from Melos configuration. Do not duplicate current package versions in `release.yaml`. A generated plan may record proposed versions as a review artifact; it is not a second maintained version database.
 
-## Versioning and tags
+Reject unsupported schema versions, unknown fields, overlapping groups, duplicate names/tags, paths escaping the checkout, and publish targets marked private. Discovery assists configuration but never authorizes publication. Deployment-only private apps may be explicitly selected without becoming package publish targets.
 
-Run the locally resolved tool with `dart run melos`. Establish a tested Melos compatibility matrix before migration. A toolchain upgrade must not silently raise the minimum SDK required by package consumers.
+## Version policy and synchronization
 
-Use Conventional Commit PR titles and a consistent feature-merge policy. Review breaking changes and prerelease increments explicitly. Preserve published changelog sections and exclude private packages from release selection even when they carry a workspace version.
+Treat these concerns separately:
 
-| Release model | Target convention |
+| Concern | Required behavior |
 | --- | --- |
-| One publishable package | `v<version>` |
-| Independently versioned packages | `<package>-v<version>` |
-| Coordinated fixed-version group | One `v<version>` for the approved group |
+| Synchronized versions | All selected publishable members of a declared group advance to the same approved version. Unrelated groups do not move. |
+| Independent versions | Each package retains its own version and release cadence. |
+| Dependency/metadata synchronization | Update a required dependency floor or derived version field without forcing the whole repository into one shared version. |
+| Publication order | Wait for required hosted dependency versions, even when upstream and downstream use different versions. |
 
-The workflow trigger, version parser, release-history lookup, and pub.dev authorization must agree. These conventions do not authorize renaming existing tags or changing publisher settings.
+Melos documents independent and whole-workspace fixed versioning. A mixed workspace containing a synchronized subset and independent packages needs a tested policy adapter; do not assume an existing named-group API or turn on workspace-wide fixed mode for that case. [3]
 
-Preserve ACK's coordinated versioning. Preserve independent package versions in Mix and Remix. Initially preserve Remix's two-tag exception: `v<version>` publishes Remix, while `remix-v<version>` records Melos history. Both must point at the same approved commit. Consolidate them only through a separately verified migration. Never move published tags.
+The adapter computes explicit target versions, invokes supported Melos operations in an isolated preparation checkout, and validates the resulting diff against the plan. Version proposals, prerelease promotion, and breaking-change decisions remain visible to reviewers. Use Conventional Commit titles and a consistent merge convention; API checks supplement them rather than treating titles as proof of compatibility. [9]
 
-A release plan records the selected targets, expected versions, tags, dependency order, prepared base commit, relevant content identity, and toolchain/provider revisions. Bind the validated plan to the final merge commit after merge; do not require a tracked plan to contain its own commit hash.
+Preserve published changelog sections and required dependency minimums. SemVer range compatibility alone does not establish that an older dependency contains a newly used API. Synchronization rules must account for actual required floors. If changing bundled metadata alters an independently published CLI's shipped content, the plan must either include that CLI's own release or explicitly leave its change pending; it must not claim that the old CLI version contains new data.
 
-For independent packages, use each package's correctly tagged publishing run. A matrix under an unrelated package's tag is not sufficient. Advance dependent releases only after their required hosted versions are available. Coordinated groups may publish in dependency stages under their authorized shared tag.
+Preparation never tags or publishes. Repeating preparation against the same source and inputs must produce the same diff, not duplicate changelog entries or keep incrementing versions.
 
-## Credentials and permissions
+## CLI contract
 
-The caller repository remains the package's publishing identity. Dart Actions supplies reusable implementation, not a replacement repository identity for every package.
+These are target commands, not commands available today:
 
-Separate three permission scopes:
-
-| Scope | Required boundary |
+| Command | Contract |
 | --- | --- |
-| Validation and preparation computation | Read-only repository access; no release App key or publishing permission. |
-| PR and tag writes | Narrowly scoped GitHub App installation token in dedicated jobs; no arbitrary caller test or generation hooks. |
-| Upload | `contents: read` and `id-token: write`, protected by the approved publishing environment. |
+| `doctor` | Report workspace, configuration, SDK/tooling, and migration problems without editing source. Remote checks are explicit and never change settings. |
+| `plan` | Compute target versions, reasons, synchronization edits, tags, dependencies, and blocked work. No source edits, tags, uploads, or deployments. Support human output and versioned JSON. |
+| `prepare` | Apply an approved plan to an isolated working copy; run Melos and declared metadata updates; return a reviewable diff. No remote writes. |
+| `check` | Run the declared validation suite and report results bound to source/tool versions. |
+| `build` | Run a named build and write an artifact record; never deploy implicitly. |
+| `verify` | Check publication/deployment results, distinguishing success, failure, and unverified state. |
 
-GitHub does not start a new push workflow for tags pushed with the ordinary `GITHUB_TOKEN`. A narrowly scoped GitHub App installation token is the proposed automatic handoff. The App key still needs secret management; OIDC does not eliminate that separate responsibility. [2]
+Example future invocation: `dart run concepta_release:concepta_release plan`.
 
-Use the official `dart-lang/setup-dart` OIDC integration for pub.dev. Prefer the official reusable publisher when its tested contract fits; otherwise preserve exact SDK selection in one shared publisher. Do not build custom JWT minting or require a permanent pub.dev token. Existing packages need repository/tag authorization, and first publication of a new package remains a maintainer step. [1]
+Publishing and deploying remain explicit privileged workflow operations, not default side effects of these commands. The same library can validate their inputs without executing caller-provided generators or scripts under publishing credentials.
 
-Acquire publishing credentials near upload, but do not confuse late provisioning with a step-level permission boundary. All steps in an OIDC-enabled job are privileged. Keep tests and generators in separate unprivileged jobs and keep the upload job small.
+## Release and deployment lifecycles
 
-Retain the existing `Production` name during migration. Verify the actual environment protections, tag rules, App permissions, and pub.dev requirements. Do not assume a YAML declaration proves those protections exist or silently create a replacement unprotected environment.
+**Package release:** plan -> prepare -> review release PR -> merge -> verify exact release commit/checks -> create approved tags -> publish through OIDC -> verify exact registry versions -> finalize release report.
 
-## Validation and resumable publication
+Use `v<version>` for an existing root package or authorized fixed workspace, and `<package>-v<version>` for independent packages. Preserve existing tag authorization during migration, including Remix's two-tag exception and ACK's coordinated release. A new group tag convention requires explicit publisher configuration and history tests, not just a new trigger string.
 
-Validate names, paths, versions, publishability, tag uniqueness, approved source identity, and required checks before requesting publishing credentials. Parse manifests rather than relying on text searches. Pass inputs through arguments or environment variables, not interpolated shell source.
+Pub.dev's GitHub integration requires a tag-push run with matching package/repository authorization. Independent targets must run under their own authorized tags; a shared matrix under another package's tag is not enough. New packages need one-time initial publication before automated publishing. [4]
 
-Run formatting, static analysis, tests, generation-drift checks, and repository-specific release checks. Fail on unexpected changes to source or generated files. Handle any known SDK configuration migration explicitly before final validation instead of discarding arbitrary tracked changes after tests.
+A synchronized release is not an atomic registry transaction. Report partial completion honestly and resume against the same tags and intended content. Network errors, authentication errors, invalid responses, and server errors are not evidence that a version is missing. An existing version needs release-consistency verification, not just an HTTP 200. Define and test that comparison before enabling automated skip-on-retry behavior.
 
-Keep these checks distinct:
+Keep mandatory publish validation. Test workspace candidates and detached hosted consumers separately. Bind validation to the actual publishable content; define the SDK's file selection and any supported transformation explicitly. Do not assume separately produced compressed archives have identical hashes. If content consistency cannot be established, stop for review rather than republish or silently mark complete.
 
-- Candidate tests may exercise unpublished sibling packages together.
-- Hosted consumer checks must detach from workspace overrides and resolve actual registry dependencies.
+**Deployment:** approved source -> validate/build -> identify artifact -> approve target environment -> deploy existing artifact -> verify -> record result. A deployment can happen without a library version bump. It waits on package publication only when its declared requirements need those hosted versions.
 
-Workspace tests alone cannot establish hosted installability. A consumer that requires an unpublished dependency remains blocked until that dependency is available. Keep workspace-dependent fixtures in their workspace tests and use detached resolution and analysis for the hosted check. [3]
+Start with static-site deployment to GitHub Pages, using the official Pages artifact/deploy actions. Builds may combine Flutter, Node, documentation generation, or other existing tools. The deployment consumes an artifact, not an assumed `flutter build web` directory. [6]
 
-Before upload, check the exact package version. Treat only a confirmed missing response as unpublished; timeouts, 403 responses, invalid payloads, and server errors must stop the decision. On reruns, establish consistency with the intended release before classifying an existing version as complete. Existence alone is not content proof. When consistency cannot be established, report unverified and require review rather than uploading again.
+Artifact records identify the source commit, builder run, tool versions, target/platform, immutable artifact reference, and digest. Keep artifacts for an explicit retention period. Redeploy a previous verified artifact where the provider permits it; unavailable artifacts and provider-specific rollback limits must be explicit. Do not promise generic rollback or rebuild old source and call it the identical artifact. Package publication has no equivalent rollback: published versions and release tags stay immutable.
 
-Keep a mandatory publish dry run. Bind validation evidence to the exact reviewed content and SDK used for publication; validate any cross-job artifact identity before use. Publish with normal client validation as the target behavior. Verify exact-version availability after upload with bounded retries before advancing dependents.
+Other providers, native binaries, mobile signing/stores, and Homebrew integrations follow the inventory. Keep their existing release paths until individually implemented and tested.
 
-Do not cancel an active upload when a new release arrives. Separate caller and provider concurrency groups to avoid collisions. Treat concurrency control as a lock, not an unlimited durable queue. Retry a partial release against the same approved tags and content.
+## Security and maintenance boundaries
 
-## Incident workaround: pub-dev #9576
+Separate read-only planning/tests/builds, GitHub PR/tag writes, pub.dev uploads, and deployments into distinct permission scopes. Late token acquisition is not a step-level security boundary: every step in an OIDC-enabled job is privileged. No caller-defined test/generation commands in that job. No private keys in configuration, build artifacts, caches, or logs.
 
-The reviewed Dart Actions publisher and ACK's separate publisher both contain `--skip-validation`. Track removal in both paths; centralizing one does not automatically migrate the other.
+Use the official Dart OIDC integration, with environment restrictions verified in GitHub and pub.dev. Keep caller repository identity; the shared workflow repository is not a replacement publisher identity. A dedicated, narrowly scoped GitHub App token handles automatic PR/tag writes. Ordinary `GITHUB_TOKEN` tag pushes do not trigger a new push workflow. Keep a maintainer-driven tag path until the automatic handoff is proven. [4, 5]
 
-Retire the flag after focused tests on an approved runner: public metadata and advisory reads, harmless dummy-bearer reads, and a tag-context dry run after real OIDC setup. Never log credentials. These tests provide different evidence: a dummy-header success does not prove publishing authorization, and a dry run does not prove upload authorization.
+Load shared helpers and the privileged CLI from reviewed provider revisions, not from arbitrary caller source or an untrusted build artifact. Test compatibility between toolkit package, configuration schema, and workflow revision; record all three in results. Read-only local planning uses the root dev dependency, while privileged operations enforce an approved compatible toolkit version independently.
 
-Confirm the full path through the first approved real release. Do not publish test versions as part of this documentation change. A temporary bypass must remain explicit, linked to the incident, and gated by successful prior validation of unchanged content. Never enable it automatically after an arbitrary error. The flag skips client validation and dependency resolution. [4]
+Pin workflows/actions, require review and validation checks, and isolate caches and cross-job artifacts by trust level. Verify protections rather than treating YAML as evidence that they exist. Update pinned dependencies through reviewed PRs. Never auto-cancel an active publish; serialize conflicting releases without relying on concurrency controls as an unlimited durable queue. [10]
 
-## Acceptance and maintenance
+Retire the `pub-dev#9576` workaround only after runner regression tests. Dummy-bearer reads, real-OIDC dry runs, and successful authorized uploads prove different things. Track both the shared publisher and ACK's local copy. No automatic `--skip-validation` fallback on arbitrary errors; keep any temporary exception explicit and gated by prior validation of unchanged content.
 
-Pin provider workflows and underlying actions to reviewed full commit SHAs. Use a reviewed exact SDK with integrity verification. Automate update PRs rather than moving consumers silently with `main`. [5]
+## Evidence and references
 
-Before changing live callers, test standalone Dart, Flutter, independent-package, and coordinated-workspace fixtures. Cover private-package rejection, wrong tags, wrong commits, missing dependencies, source drift, partial-release retry, registry failures, helper revision selection, and credential isolation.
+PR #9 is the design; PR #10 is the existing opt-in foundation implementation. Both were open and unmerged when rechecked on September 14, 2026. The broader repository review is a sample, not a complete organization inventory. Administration, provider coverage, and package-name ownership are still rollout gates.
 
-Keep release records of the caller, source commit, package versions, tag names, SDK, provider revision, and verification result. Migrate one caller at a time and remove duplicated generic scripts only after approved releases demonstrate parity.
-
-## References and review baseline
-
-Baseline reviewed on September 12, 2026: Dart Actions commit `9bb0b129ef4984963f9df9e03733eb2851e413ad`. This is a design proposal, not evidence that protection settings or new workflows have been deployed.
-
-- [Current shared publisher](https://github.com/conceptadev/dart-actions/blob/9bb0b129ef4984963f9df9e03733eb2851e413ad/.github/workflows/publish.yml)
-- [ACK publisher reviewed for reusable checks](https://github.com/conceptadev/ack/blob/c5367ff1a93c9ee07b3c31e1d1bce304858508ee/.github/workflows/publish-packages.yml)
-- [Remix release preparation reviewed](https://github.com/conceptadev/remix/blob/f2a3f2b1e8629fc2475002307c5770aab7bb960c/.github/workflows/version.yml)
-- [Incident: dart-lang/pub-dev#9576](https://github.com/dart-lang/pub-dev/issues/9576)
-- [1: Dart automated publishing](https://dart.dev/tools/pub/automated-publishing)
-- [2: GitHub workflow triggering and token behavior](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
-- [3: Pub workspaces](https://dart.dev/tools/pub/workspaces)
-- [4: dart pub publish](https://dart.dev/tools/pub/cmd/pub-lish)
-- [5: GitHub secure use of Actions](https://docs.github.com/en/actions/reference/security/secure-use)
-- [Melos versioning](https://melos.invertase.dev/commands/version)
-- [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+- [1: Pub workspaces](https://dart.dev/tools/pub/workspaces)
+- [2: Melos configuration and root-package support](https://melos.invertase.dev/configuration/overview)
+- [3: Melos versioning](https://melos.invertase.dev/commands/version)
+- [4: Dart automated publishing](https://dart.dev/tools/pub/automated-publishing)
+- [5: GitHub token event behavior](https://docs.github.com/en/actions/concepts/security/github_token)
+- [6: GitHub Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
+- [7: Repository rename limitations](https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository)
+- [8: Package and development dependencies](https://dart.dev/tools/pub/dependencies)
+- [9: Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+- [10: Secure use of GitHub Actions](https://docs.github.com/en/actions/reference/security/secure-use)
+- [Design PR #9](https://github.com/conceptadev/dart-actions/pull/9)
+- [Foundation PR #10](https://github.com/conceptadev/dart-actions/pull/10)
+- [pub.dev incident #9576](https://github.com/dart-lang/pub-dev/issues/9576)
