@@ -1,0 +1,7 @@
+version: 1
+
+packages:
+  - name: legacy_root
+    publish: true
+  - name: legacy_helper
+    publish: true

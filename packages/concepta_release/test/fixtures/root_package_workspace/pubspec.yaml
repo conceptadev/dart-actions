@@ -1,0 +1,12 @@
+name: legacy_root
+description: A published root package migrating to a workspace layout.
+version: 2.0.0
+
+environment:
+  sdk: ^3.8.0
+
+workspace:
+  - packages/helper
+
+dependencies:
+  legacy_helper: ^0.1.0

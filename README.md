@@ -2,14 +2,43 @@
 
 A collection of reusable GitHub Actions workflows for Dart and Flutter projects. These workflows are designed to streamline CI/CD processes, enforce code quality standards, and automate publishing to pub.dev.
 
+This repository also hosts **Concepta Release**, the Dart toolkit that holds the
+deterministic part of the release process so it runs the same way locally and in
+CI. See [`docs/concepta-release.md`](docs/concepta-release.md). It is additive:
+the reusable workflows below are unchanged.
+
 ## 📋 Table of Contents
 
+- [Concepta Release toolkit](#concepta-release-toolkit)
 - [Available Workflows](#available-workflows)
   - [CI Workflow](#ci-workflow)
   - [PR Title Check Workflow](#pr-title-check-workflow)
   - [Publish Workflow](#publish-workflow)
 - [Quick Start](#quick-start)
 - [Detailed Usage](#detailed-usage)
+
+---
+
+## Concepta Release toolkit
+
+`packages/concepta_release` is a Dart library and CLI for release planning. It
+reads pub workspace membership and a `release.yaml`, then reports problems or
+produces a deterministic release plan. It is read-only today.
+
+```bash
+dart run concepta_release doctor
+dart run concepta_release plan --bump my_package:minor
+dart run concepta_release plan --bump my_package:minor --json
+```
+
+`doctor` validates the workspace against `release.yaml`. `plan` proposes
+versions, expands synchronized groups, raises dependency floors, orders
+publication into stages, and renders tags. Neither command writes a file,
+creates a tag, contacts pub.dev, or reads a credential.
+
+Full reference, including the configuration schema and version rules:
+[`docs/concepta-release.md`](docs/concepta-release.md).
+Current organization inventory: [`docs/release-inventory.md`](docs/release-inventory.md).
 
 ---
 
@@ -392,6 +421,8 @@ jobs:
 
 ## Additional Resources
 
+- [Concepta Release toolkit](docs/concepta-release.md) - Release configuration, planning rules, and CLI reference
+- [Release inventory](docs/release-inventory.md) - Which repositories the toolkit has to support
 - [Coverage Comment Action](docs/COVERAGE_ACTION.md) - Automated code coverage analysis and PR comments
 - [Conventional Commits](https://www.conventionalcommits.org/) - Commit message specification
 - [Melos](https://melos.invertase.dev/) - Tool for managing Dart/Flutter monorepos

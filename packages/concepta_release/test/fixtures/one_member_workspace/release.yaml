@@ -1,0 +1,8 @@
+version: 1
+
+defaults:
+  tag: "v{version}"
+
+packages:
+  - name: solo
+    publish: true

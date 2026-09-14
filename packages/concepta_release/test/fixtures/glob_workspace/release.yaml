@@ -1,0 +1,7 @@
+version: 1
+
+packages:
+  - name: alpha
+    publish: true
+  - name: beta
+    publish: true

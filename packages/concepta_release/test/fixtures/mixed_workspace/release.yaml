@@ -1,0 +1,32 @@
+version: 1
+
+defaults:
+  tag: "{package}-v{version}"
+  group_tag: "v{version}"
+  bump_dependents: patch
+
+groups:
+  - name: core
+    packages:
+      - sample_core
+      - sample_annotations
+
+packages:
+  - name: sample_core
+    publish: true
+  - name: sample_annotations
+    publish: true
+  - name: sample_generator
+    publish: true
+  - name: sample_cli_tool
+    publish: true
+    tag: "cli-v{version}"
+  - name: sample_playground
+    publish: false
+
+deployments:
+  - name: playground
+    provider: github-pages
+    source: apps/playground
+    environment: github-pages
+    package: sample_playground

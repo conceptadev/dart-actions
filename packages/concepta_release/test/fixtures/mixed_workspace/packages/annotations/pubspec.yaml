@@ -1,0 +1,6 @@
+name: sample_annotations
+version: 1.4.0
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0

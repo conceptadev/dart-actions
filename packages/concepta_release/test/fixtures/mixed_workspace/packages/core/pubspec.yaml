@@ -1,0 +1,9 @@
+name: sample_core
+version: 1.4.0
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  sample_annotations: ^1.4.0

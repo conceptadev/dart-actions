@@ -1,0 +1,11 @@
+name: sample_widget
+description: A standalone Flutter package with no workspace declaration.
+version: 0.3.0
+
+environment:
+  sdk: ^3.8.0
+  flutter: ">=3.41.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
