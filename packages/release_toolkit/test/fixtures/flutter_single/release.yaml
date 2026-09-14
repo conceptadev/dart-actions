@@ -1,0 +1,8 @@
+version: 1
+
+defaults:
+  tag: "v{version}"
+
+packages:
+  - name: sample_widget
+    publish: true

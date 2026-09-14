@@ -1,0 +1,11 @@
+name: sample_playground
+description: Private demo app. Deployable, never publishable.
+version: 0.0.1
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  sample_core: ^1.4.0

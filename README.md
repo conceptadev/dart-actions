@@ -2,14 +2,43 @@
 
 A collection of reusable GitHub Actions workflows for Dart and Flutter projects. These workflows are designed to streamline CI/CD processes, enforce code quality standards, and automate publishing to pub.dev.
 
+This repository also hosts **Release Toolkit**, the Dart package that holds the
+deterministic part of the release process so it runs the same way locally and in
+CI. See [`docs/release-toolkit.md`](docs/release-toolkit.md). It is additive:
+the reusable workflows below are unchanged.
+
 ## 📋 Table of Contents
 
+- [Release Toolkit](#release-toolkit)
 - [Available Workflows](#available-workflows)
   - [CI Workflow](#ci-workflow)
   - [PR Title Check Workflow](#pr-title-check-workflow)
   - [Publish Workflow](#publish-workflow)
 - [Quick Start](#quick-start)
 - [Detailed Usage](#detailed-usage)
+
+---
+
+## Release Toolkit
+
+`packages/release_toolkit` is a Dart library and CLI for release planning. It
+reads pub workspace membership and a `release.yaml`, then reports problems or
+produces a deterministic release plan. It is read-only today.
+
+```bash
+dart run release_toolkit doctor
+dart run release_toolkit plan --bump my_package:minor
+dart run release_toolkit plan --bump my_package:minor --json
+```
+
+`doctor` validates the workspace against `release.yaml`. `plan` proposes
+versions, expands synchronized groups, raises dependency floors, orders
+publication into stages, and renders tags. Neither command writes a file,
+creates a tag, contacts pub.dev, or reads a credential.
+
+Full reference, including the configuration schema and version rules:
+[`docs/release-toolkit.md`](docs/release-toolkit.md).
+Current organization inventory: [`docs/release-inventory.md`](docs/release-inventory.md).
 
 ---
 
@@ -392,6 +421,8 @@ jobs:
 
 ## Additional Resources
 
+- [Release Toolkit](docs/release-toolkit.md) - Release configuration, planning rules, and CLI reference
+- [Release inventory](docs/release-inventory.md) - Which repositories the toolkit has to support
 - [Coverage Comment Action](docs/COVERAGE_ACTION.md) - Automated code coverage analysis and PR comments
 - [Conventional Commits](https://www.conventionalcommits.org/) - Commit message specification
 - [Melos](https://melos.invertase.dev/) - Tool for managing Dart/Flutter monorepos

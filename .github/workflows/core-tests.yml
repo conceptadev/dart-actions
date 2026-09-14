@@ -1,0 +1,79 @@
+name: Release Toolkit core
+
+# Tests the Dart toolkit in packages/release_toolkit. It does not touch the
+# reusable ci.yml or publish.yml contracts that callers already depend on.
+on:
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'pubspec.yaml'
+      - 'analysis_options.yaml'
+      - 'release.yaml'
+      - '.github/workflows/core-tests.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  format:
+    # Pinned, not `stable`. The Dart formatter changes between releases, and a
+    # floating version turns unrelated PRs red. Bump this deliberately.
+    name: Format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+        with:
+          sdk: 3.13.3
+      - name: Resolve workspace dependencies
+        run: dart pub get
+      - run: dart format --output=none --set-exit-if-changed .
+
+  test:
+    name: Dart ${{ matrix.sdk }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # The lower bound proves the declared consumer SDK floor still
+        # resolves. `stable` catches regressions in the current toolchain.
+        sdk: ['3.8.0', 'stable']
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+        with:
+          sdk: ${{ matrix.sdk }}
+      - name: Resolve workspace dependencies
+        run: dart pub get
+      - name: Analyze
+        run: dart analyze --fatal-infos
+      - name: Test
+        run: dart test
+        working-directory: packages/release_toolkit
+      - name: Validate this repository with its own toolkit
+        run: dart run release_toolkit doctor --directory ../..
+        working-directory: packages/release_toolkit
+      - name: Require an unchanged source tree
+        run: |
+          status="$(git status --porcelain=v1 --untracked-files=normal)"
+          if [ -n "$status" ]; then
+            echo "Checks changed the source tree; nothing was restored:" >&2
+            printf '%s\n' "$status" >&2
+            exit 1
+          fi

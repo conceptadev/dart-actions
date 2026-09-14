@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.dart_tool/
+build/
+# These are smoke-test fixtures, not released applications.
+fixtures/**/pubspec.lock
+packages/**/pubspec.lock
+pubspec.lock

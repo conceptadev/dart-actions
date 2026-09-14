@@ -1,0 +1,7 @@
+name: solo
+description: The only publishable package in this workspace.
+version: 0.4.2
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0

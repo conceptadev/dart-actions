@@ -1,0 +1,6 @@
+name: alpha
+version: 1.0.0
+resolution: workspace
+
+environment:
+  sdk: ^3.11.0

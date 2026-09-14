@@ -1,0 +1,13 @@
+name: sample_workspace
+description: Workspace with a synchronized group, independent packages, and an app.
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+workspace:
+  - apps/playground
+  - packages/annotations
+  - packages/cli
+  - packages/core
+  - packages/generator

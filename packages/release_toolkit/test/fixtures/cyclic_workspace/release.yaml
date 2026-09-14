@@ -1,0 +1,7 @@
+version: 1
+
+packages:
+  - name: left
+    publish: true
+  - name: right
+    publish: true

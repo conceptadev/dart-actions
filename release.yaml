@@ -1,0 +1,10 @@
+# Release Toolkit configuration for this repository.
+#
+# The toolkit validates itself with this file. release_toolkit is not
+# publishable yet: the package name is proposed, not reserved, and
+# distribution is a separate reviewed step (see docs/release-toolkit.md).
+version: 1
+
+packages:
+  - name: release_toolkit
+    publish: false

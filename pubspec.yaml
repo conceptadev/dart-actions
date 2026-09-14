@@ -1,0 +1,9 @@
+name: dart_actions_workspace
+description: Private root of the Release Toolkit workspace.
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+workspace:
+  - packages/release_toolkit

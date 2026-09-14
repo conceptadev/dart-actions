@@ -1,0 +1,9 @@
+name: left
+version: 1.0.0
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  right: ^1.0.0

@@ -1,0 +1,331 @@
+# Release Toolkit core
+
+`packages/release_toolkit` is the Dart library and CLI that holds the
+deterministic part of a Dart or Flutter release process. The same code runs on a
+maintainer's machine and inside GitHub Actions.
+
+This document covers what exists today: configuration, workspace loading, the
+read-only `doctor` and `plan` commands, and isolated Melos-backed preparation.
+Publishing, deployment execution, and recovery remain later stages tracked in
+the rollout plan (PR #9).
+
+## What the core owns, and what it does not
+
+The library owns decisions that must be identical everywhere:
+
+- reading pub workspace membership and package manifests
+- validating `release.yaml` against the real workspace
+- selecting release targets, expanding synchronized groups, and isolating
+  independently versioned packages
+- proposing versions for the stable, beta, and rc channels
+- raising declared dependency version floors
+- ordering publication into dependency stages
+- rendering release tags
+- producing a stable, serializable release plan
+- validating and preparing the approved release diff in an isolated checkout
+
+GitHub Actions owns everything environmental: runners, SDK bootstrap,
+credentials, protected environments, event and ref authorization, artifact
+transport, OIDC, GitHub App operations, and provider deployment steps.
+
+`release.yaml` never contains a credential.
+
+### Planning is read-only
+
+`planRelease` is a pure function. It does not read Git, contact a registry,
+mutate a file, or acquire a credential. Facts about the outside world arrive as
+explicit inputs:
+
+| Input | Carries |
+| --- | --- |
+| `Workspace` | package manifests as loaded from disk |
+| `ReleaseConfig` | parsed `release.yaml` |
+| `ReleaseRequest` | requested bumps, explicit versions, channel, source identity |
+| `RemoteState` | tags that already exist, versions already on the registry |
+
+A test asserts that planning the `mixed_workspace` fixture leaves every file on
+disk byte-identical, and that identical inputs produce identical JSON.
+
+## `release.yaml`
+
+Releases are opt-in. A workspace member that is not declared here can never be
+released, and `publish` defaults to `false`, so discovery alone never authorizes
+an upload.
+
+```yaml
+version: 1
+
+defaults:
+  # Tag template for independently versioned packages.
+  tag: "{package}-v{version}"
+  # Tag template for a synchronized group. One tag covers every member.
+  group_tag: "v{version}"
+  # Bump applied to a publishable package when a dependency floor it declares
+  # has to be raised. Use `none` to record the edit without releasing it.
+  bump_dependents: patch
+
+groups:
+  - name: core
+    # Optional per-group override of defaults.group_tag.
+    tag: "v{version}"
+    packages:
+      - sample_core
+      - sample_annotations
+
+packages:
+  - name: sample_core
+    publish: true
+  - name: sample_cli_tool
+    publish: true
+    # Optional per-package override of defaults.tag.
+    tag: "cli-v{version}"
+  - name: sample_playground
+    publish: false
+
+deployments:
+  - name: playground
+    provider: github-pages
+    source: apps/playground
+    environment: github-pages
+    package: sample_playground
+```
+
+Unknown fields are errors, not warnings, at every level. A typo must not
+silently disable a release rule.
+
+### Rules that are enforced
+
+| Code | Meaning |
+| --- | --- |
+| `config-unknown-field` | A field not in the schema |
+| `config-version-unsupported` | `version:` is not 1 |
+| `unknown-package` | A declared package is not a workspace member |
+| `private-package-publish` | `publish: true` on a `publish_to: none` package |
+| `package-missing-version` | A declared package has no pubspec version |
+| `overlapping-groups` | A package appears in two groups |
+| `group-member-not-declared` | A group lists a package with no `packages:` entry |
+| `tag-template-missing-version` | A template with no `{version}` |
+| `group-tag-template-package` | A group template using `{package}` |
+| `tag-template-collision` | Two independent packages resolve to one tag shape |
+| `deployment-source-escapes` | A deployment source outside the workspace |
+| `package-undeclared` | A workspace member that cannot be released (note) |
+
+## Commands
+
+```
+release_toolkit doctor [--directory .] [--config <path>] [--json]
+release_toolkit plan   [--directory .] [--config <path>] [--json]
+                        [--channel stable|beta|rc]
+                        [--bump <package>:<none|patch|minor|major>]...
+                        [--set-version <package>:<version>]...
+                        [--existing-tag <tag>]...
+                        [--published <package>:<version>]...
+                        [--source-repository <slug>]
+                        [--source-ref <ref>]
+                        [--source-revision <sha>]
+release_toolkit prepare --plan <file> --directory <repository>
+                        --output <new-directory> [--json]
+```
+
+Exit codes: `0` success, `2` the command could not be understood, `3` the
+command ran and reported at least one error diagnostic. `doctor` and `plan`
+never write anything; redirect `plan --json` stdout to capture a plan.
+
+`--bump` is the caller's decision, not a guess. Nothing in the core parses
+commit messages; an adapter that derives bumps from history can be added later
+without changing the planner.
+
+`--existing-tag` and `--published` are how a workflow tells the planner about
+the outside world. Both are checked before a plan is accepted.
+
+## How versions are proposed
+
+Arithmetic is plain semver. `major` always moves to `X+1.0.0`, including for
+`0.x` packages, so `0.5.1 -> major` is `1.0.0`, not `0.6.0`.
+
+| Current | Bump | Channel | Proposed |
+| --- | --- | --- | --- |
+| `1.2.3` | patch | stable | `1.2.4` |
+| `1.2.3` | minor | beta | `1.3.0-beta.0` |
+| `1.3.0-beta.0` | none | beta | `1.3.0-beta.1` |
+| `1.3.0-beta.2` | none | rc | `1.3.0-rc.0` |
+| `1.3.0-rc.1` | none | stable | `1.3.0` (graduation) |
+| `1.2.3` | none | stable | no-op, reported as `no-version-change` |
+| `1.2.3` | none | beta | `prerelease-requires-bump` error |
+
+A synchronized group advances from the highest current version among its
+members. Members at different versions are reported as `group-version-drift`
+before they are aligned.
+
+## How dependency floors move
+
+When a package releases, every declared floor on it is examined. The written
+style is preserved:
+
+| Declared | Released | Result |
+| --- | --- | --- |
+| `^1.2.0` | `1.3.0` | `^1.3.0` |
+| `>=1.2.0 <2.0.0` | `1.3.0` | `>=1.3.0 <2.0.0` |
+| `1.2.0` (exact pin) | `1.3.0` | `1.3.0` |
+| `1.4.0` (exact pin) | `1.3.0` | `dependency-floor-conflict` error |
+| `^1.3.0` | `1.3.0` | unchanged |
+| `^1.2.0` | `2.0.0` | `dependency-floor-conflict` error |
+| `^0.2.0` | `0.3.0` | `dependency-floor-conflict` error |
+| `>=1.2.0 <2.0.0` | `2.0.0` | `dependency-floor-conflict` error |
+| `any` | `1.3.0` | `dependency-floor-unbounded` warning |
+| `^1.2.0` | `1.3.0-beta.0` | unchanged; a pre-release never moves a floor |
+
+A constraint is never widened to make a release fit. Caret major and pre-1.0
+compatibility boundaries and exact-pin downgrades are conflicts that require a
+deliberate pubspec edit.
+
+A floor change on a publishable package selects it for release at
+`defaults.bump_dependents`. A floor change on a package that is not being
+released is recorded under `metadataUpdates` instead, so preparation can still
+apply the edit without the plan claiming to authorize a release.
+
+Only runtime `dependencies` pull a package into a release, and only runtime
+dependencies determine publication order. Dev-dependency floors are still
+updated; when one points at a package that publishes in a later stage, the plan
+reports `dev-dependency-published-later` rather than silently producing a
+release that cannot resolve.
+
+Pre-release versions still never move dependency floors automatically. When a
+selected package has a runtime dependency on another selected pre-release, its
+existing constraint must already allow the proposed version or planning reports
+`dependency-floor-conflict`.
+
+## The plan document
+
+`--json` writes a stable document with a fixed key order, sorted lists, no
+timestamp, and no absolute paths.
+
+```json
+{
+  "schemaVersion": 1,
+  "toolkitVersion": "0.1.0",
+  "channel": "stable",
+  "source": { "repository": "...", "ref": "...", "revision": "..." },
+  "noop": false,
+  "releases": [
+    {
+      "package": "sample_core",
+      "path": "packages/core",
+      "action": "publish",
+      "group": "core",
+      "currentVersion": "1.4.0",
+      "proposedVersion": "1.5.0",
+      "bump": "minor",
+      "tag": "v1.5.0",
+      "stage": 1,
+      "reasons": ["requested minor"],
+      "dependencyUpdates": [
+        {
+          "dependency": "sample_annotations",
+          "section": "dependencies",
+          "from": "^1.4.0",
+          "to": "^1.5.0"
+        }
+      ]
+    }
+  ],
+  "tags": [{ "tag": "v1.5.0", "packages": ["sample_annotations", "sample_core"] }],
+  "stages": [["sample_annotations"], ["sample_core"]],
+  "metadataUpdates": [],
+  "deployments": [],
+  "diagnostics": []
+}
+```
+
+`source` is recorded from caller-supplied flags. The planner never looks a
+commit up, which keeps a plan reboundable to the final reviewed merge commit
+instead of embedding a hash inside its own commit.
+
+`action` is `publish` or `version-only`. A private package can be
+version-synchronized with a group and can be deployed, but never becomes a
+publish target. Version-only targets do not appear in publication stages. A
+private-only release unit has no tag; a mixed synchronized group has one tag
+whose owners are only its publishable members.
+
+`noop` means there are no package-version releases. It does not mean the plan
+contains no deployment work.
+
+## Isolated preparation
+
+`prepare` requires an error-free schema-1 plan with this toolkit version and a
+full Git object ID in `source.revision`. The source checkout must be clean and
+at that exact revision, and the output path must not exist or sit inside the
+source checkout. `doctor` and `plan` retain the toolkit's Dart 3.8 floor;
+`prepare` requires Dart 3.9 or later because the verified Melos 7.8.1 release
+declares that SDK floor.
+
+Preparation then:
+
+1. clones the source without Git hard links, leaving its working tree and Git
+   database unchanged;
+2. resolves Melos with `dart run melos` from the cloned repository and accepts
+   only the currently verified exact version, 7.8.1;
+3. reloads `release.yaml` and every manifest, regenerates the planned
+   operations, and checks that Melos includes every selected package (including
+   root-package `useRootAsPackage` configuration);
+4. passes every exact package version and scope to `melos version`, enables
+   conventional-commit changelogs, and explicitly disables dependent edits,
+   release commits, and tags;
+5. applies only the plan's structured dependency edits; and
+6. compares the resulting manifests, versions, dependency constraints,
+   changelog history, files, Git head, and tags with the approved operation set.
+
+Melos aggregate changelogs use the wall clock by default. Preparation
+normalizes only each newly generated aggregate date heading to the approved
+source commit date so the same source produces an equivalent diff on a later
+day. Optional package-level dated changelogs are rejected because they would
+reintroduce wall-clock variance.
+
+Successful JSON reports the prepared directory, source revision, Melos version,
+and every changed file with its reasons. A failure after cloning retains the
+checkout for inspection, writes `.release_toolkit_unusable.json`, and marks the
+directory unusable for release. No preparation path publishes, pushes, creates
+a tag, or modifies the original checkout.
+
+Repository dependencies must already resolve cleanly at the source revision.
+Unsupported Melos versions, fixed-versioning configuration, excluded selected
+packages, stale plans, and other unexpected diff content are actionable
+failures. Version lifecycle hooks are rejected before Melos runs because their
+arbitrary commands cannot be constrained to local, reviewable file edits.
+
+## Fixtures
+
+`packages/release_toolkit/test/fixtures` holds the layouts the toolkit has to
+support:
+
+| Fixture | Proves |
+| --- | --- |
+| `dart_single` | Dart-only root package, no workspace declaration |
+| `flutter_single` | standalone Flutter package, SDK dependency handling |
+| `one_member_workspace` | workspace with exactly one member |
+| `root_package_workspace` | published root package plus a member |
+| `mixed_workspace` | synchronized group, independent packages, private app, deployment |
+| `glob_workspace` | `workspace:` glob expansion |
+| `cyclic_workspace` | an unsatisfiable publication order |
+
+### Verified pub behaviour
+
+`workspace:` globs such as `packages/*` require language version 3.11 or later.
+Below that, pub fails resolution with `No workspace packages matching`. The
+loader reports `workspace-glob-language-version` instead of silently finding no
+members. The Dart analyzer's pubspec validator still flags glob entries even
+when pub resolves them, which is why the fixture directory is excluded from
+analysis.
+
+## Relationship to the rest of the rollout
+
+- PR #9 holds the architecture and rollout documents. Deterministic planning
+  and isolated preparation are implemented here; the remaining R4-R8 rollout
+  is not complete.
+- PR #10 holds the workflow-hardening foundation: the source-drift action,
+  actionlint, immutable action pins, and the checksum-verified Flutter setup.
+  Those remain useful and are not duplicated here.
+- `release_toolkit` sets `publish_to: none`. The package name is proposed, not
+  reserved. Distribution, publishing, and recovery need their own review.
+- The existing `ci.yml` and `publish.yml` reusable workflows are untouched.
+  Live callers keep their current behaviour.
